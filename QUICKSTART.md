@@ -3,30 +3,38 @@
 ## Avvio Rapido (5 minuti)
 
 ### Prerequisiti
-✅ Qt 6.2+ installato (raccomandato 6.5+)
+✅ Qt 6.2+ installato
 ✅ GDAL installato
-✅ Compilatore C++ (GCC/MSVC/Clang)
+✅ CMake 3.16+
+✅ Compilatore C++17
 
 ### Compilazione Express
 
-#### Linux
+#### Qt Creator (Raccomandato)
+1. Apri Qt Creator
+2. File → Open File or Project
+3. Seleziona `CMakeLists.txt`
+4. Configure Project con il tuo Kit Qt6
+5. Build → Build Project (Ctrl+B)
+6. Run → Run (Ctrl+R)
+
+#### Command Line (Linux/macOS)
 ```bash
 cd OliveGeoTiffViewer
-./build_linux.sh
+mkdir build && cd build
+cmake ..
+make -j$(nproc)
 ./OliveGeoTiffViewer
 ```
 
-#### Windows
+#### Command Line (Windows)
 ```cmd
 cd OliveGeoTiffViewer
-build_windows.bat
-release\OliveGeoTiffViewer.exe
+mkdir build && cd build
+cmake .. -G "Ninja"
+cmake --build . --config Release
+Release\OliveGeoTiffViewer.exe
 ```
-
-#### Qt Creator (Tutti i sistemi)
-1. Apri `OliveGeoTiffViewer.pro`
-2. Clicca "Configure Project"
-3. Clicca "Run" (▶️)
 
 ---
 
@@ -107,12 +115,11 @@ OliveGeoTiffViewer/
 
 ## Risoluzione Problemi Comuni
 
-### ❌ "qmake: command not found"
-```bash
-# Linux (Qt 6)
-export PATH=/usr/lib/qt6/bin:$PATH
+### ❌ "CMake Error: Could not find Qt6"
 
-# Windows - Apri "Qt 6.x.x (MSVC)" Command Prompt dal menu Start
+**Soluzione**: Specifica il path di Qt in Qt Creator durante la configurazione del Kit, oppure:
+```bash
+cmake .. -DCMAKE_PREFIX_PATH=/path/to/Qt/6.x.x/gcc_64
 ```
 
 ### ❌ "cannot find -lgdal"

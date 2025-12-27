@@ -80,16 +80,14 @@ bool RunAnalysis(
 ## Requisiti di Sistema
 
 ### Dipendenze Software
-- **Qt 6.2+** (raccomandato Qt 6.5+ o 6.8 LTS)
+- **Qt 6.2+** (raccomandato Qt 6.5+)
   - QtQuick
   - QtQuick.Controls
-  - QtQuick3D (sostituisce Qt3D)
+  - QtQuick3D
   - QtQuick.Dialogs
 - **GDAL 3.x** (Geospatial Data Abstraction Library)
-- **C++17** compiler
-  - Windows: Visual Studio 2022 (raccomandato) o 2019
-  - Linux: GCC 9+ o Clang 10+
-  - macOS: Apple Clang 12+
+- **CMake 3.16+**
+- **C++17 compiler**
 
 ### Librerie Esterne
 - **OliveMatrixLib.dll** (opzionale, con fallback per testing)
@@ -129,18 +127,34 @@ sudo apt-get install qt6-base-dev qt6-declarative-dev qt6-quick3d-dev
 brew install qt@6
 ```
 
-### 3. Compilazione del Progetto
+### 3. Compilare l'Applicazione
 
+#### Con Qt Creator (Raccomandato)
+1. Apri Qt Creator
+2. File → Open File or Project
+3. Seleziona `CMakeLists.txt` nella directory del progetto
+4. Configura il Kit (seleziona il kit Qt6 appropriato)
+5. Build → Build Project (Ctrl+B)
+6. Run → Run (Ctrl+R)
+
+#### Da Linea di Comando
+
+**Linux/macOS**:
 ```bash
 cd OliveGeoTiffViewer
-qmake OliveGeoTiffViewer.pro
-make
+mkdir build && cd build
+cmake ..
+make -j$(nproc)
+./OliveGeoTiffViewer
 ```
 
-O usa Qt Creator:
-1. Apri `OliveGeoTiffViewer.pro` in Qt Creator
-2. Configura il kit di compilazione
-3. Build → Build Project
+**Windows**:
+```cmd
+cd OliveGeoTiffViewer
+mkdir build && cd build
+cmake ..
+cmake --build . --config Release
+```
 
 ### 4. Configurazione OliveMatrixLib
 
