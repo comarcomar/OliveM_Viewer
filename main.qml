@@ -9,7 +9,22 @@ ApplicationWindow {
     visible: true
     width: 1600
     height: 900
-    title: "Olive GeoTIFF Analysis Viewer"
+    title: "OM Tree Crown Segmentation Tool"
+    
+    // Theme management
+    property bool isDarkTheme: true
+    property color backgroundColor: isDarkTheme ? "#2b2b2b" : "#e8f4f8"
+    property color panelColor: isDarkTheme ? "#1e1e1e" : "#ffffff"
+    property color borderColor: isDarkTheme ? "#404040" : "#b0d4e0"
+    property color textColor: isDarkTheme ? "#ffffff" : "#1a1a1a"
+    property color textSecondaryColor: isDarkTheme ? "#cccccc" : "#555555"
+    property color buttonColor: isDarkTheme ? "#003366" : "#4a90e2"
+    property color buttonHoverColor: isDarkTheme ? "#004499" : "#357abd"
+    property color buttonPressedColor: isDarkTheme ? "#0066cc" : "#2e6da4"
+    
+    // Settings
+    property bool denoiseEnabled: true
+    property int areaThreshold: 70
     
     // Processor backend
     GeoTiffProcessor {
@@ -25,19 +40,159 @@ ApplicationWindow {
         }
     }
     
-    // Color maps definition
+    // Color maps definition (removed Cool and Plasma)
     property var colorMaps: [
         { name: "Jet", colors: ["#000080", "#0000FF", "#00FFFF", "#00FF00", "#FFFF00", "#FF0000", "#800000"] },
         { name: "Hot", colors: ["#000000", "#FF0000", "#FFFF00", "#FFFFFF"] },
-        { name: "Cool", colors: ["#00FFFF", "#FF00FF"] },
         { name: "Gray", colors: ["#000000", "#FFFFFF"] },
-        { name: "Viridis", colors: ["#440154", "#31688e", "#35b779", "#fde724"] },
-        { name: "Plasma", colors: ["#0d0887", "#7e03a8", "#cc4778", "#f89540", "#f0f921"] }
+        { name: "Viridis", colors: ["#440154", "#31688e", "#35b779", "#fde724"] }
     ]
     
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
+        
+        // Toolbar
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 50
+            color: mainWindow.panelColor
+            border.color: mainWindow.borderColor
+            border.width: 1
+            
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 5
+                spacing: 10
+                
+                // Settings button
+                ToolButton {
+                    implicitWidth: 40
+                    implicitHeight: 40
+                    
+                    contentItem: Text {
+                        text: "⚙"
+                        font.pixelSize: 22
+                        color: mainWindow.textColor
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    
+                    background: Rectangle {
+                        color: parent.pressed ? mainWindow.buttonPressedColor : 
+                               (parent.hovered ? mainWindow.buttonHoverColor : mainWindow.buttonColor)
+                        radius: 4
+                    }
+                    
+                    onClicked: settingsDialog.open()
+                    
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Settings"
+                }
+                
+                // Reset button
+                ToolButton {
+                    implicitWidth: 40
+                    implicitHeight: 40
+                    
+                    contentItem: Text {
+                        text: "↻"
+                        font.pixelSize: 22
+                        color: mainWindow.textColor
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    
+                    background: Rectangle {
+                        color: parent.pressed ? mainWindow.buttonPressedColor : 
+                               (parent.hovered ? mainWindow.buttonHoverColor : mainWindow.buttonColor)
+                        radius: 4
+                    }
+                    
+                    onClicked: resetSystem()
+                    
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Reset System"
+                }
+                
+                Item { Layout.fillWidth: true }
+            }
+        }
+        
+        // Input controls panel
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 80
+            color: mainWindow.panelColor
+            border.color: mainWindow.borderColor
+            border.width: 1
+            enabled: image1Panel.imagePath !== "" || image2Panel.imagePath !== ""
+            opacity: enabled ? 1.0 : 0.5
+            
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 15
+                
+                Label {
+                    text: "Input Data:"
+                    font.pixelSize: 12
+                    font.bold: true
+                    color: mainWindow.textColor
+                }
+                
+                Button {
+                    text: "Shapefile (.zip)"
+                    implicitHeight: 35
+                    onClicked: shapefileDialog.open()
+                    
+                    background: Rectangle {
+                        color: parent.pressed ? mainWindow.buttonPressedColor : 
+                               (parent.hovered ? mainWindow.buttonHoverColor : mainWindow.buttonColor)
+                        radius: 4
+                    }
+                    
+                    contentItem: Text {
+                        text: parent.text
+                        color: "#ffffff"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        font.pixelSize: 11
+                    }
+                }
+                
+                Button {
+                    text: "RGB Orthophoto"
+                    implicitHeight: 35
+                    onClicked: rgbDialog.open()
+                    
+                    background: Rectangle {
+                        color: parent.pressed ? mainWindow.buttonPressedColor : 
+                               (parent.hovered ? mainWindow.buttonHoverColor : mainWindow.buttonColor)
+                        radius: 4
+                    }
+                    
+                    contentItem: Text {
+                        text: parent.text
+                        color: "#ffffff"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        font.pixelSize: 11
+                    }
+                }
+                
+                Label {
+                    id: rgbStatusLabel
+                    text: rgbImagePath !== "" ? "RGB: " + rgbImagePath.split('/').pop() : ""
+                    font.pixelSize: 10
+                    color: mainWindow.textSecondaryColor
+                    elide: Text.ElideMiddle
+                    Layout.fillWidth: true
+                }
+                
+                Item { Layout.fillWidth: true }
+            }
+        }
         
         // Main content area
         RowLayout {
@@ -49,7 +204,7 @@ ApplicationWindow {
             Rectangle {
                 Layout.fillHeight: true
                 Layout.preferredWidth: parent.width * 0.35
-                color: "#2b2b2b"
+                color: mainWindow.backgroundColor
                 
                 ColumnLayout {
                     anchors.fill: parent
@@ -61,7 +216,7 @@ ApplicationWindow {
                         id: image1Panel
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        panelTitle: "Image 1"
+                        panelTitle: "Ortofoto DSM"
                         colorMaps: mainWindow.colorMaps
                         onImageChanged: {
                             processor.setImage1(imagePath)
@@ -72,7 +227,7 @@ ApplicationWindow {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 2
-                        color: "#404040"
+                        color: mainWindow.borderColor
                     }
                     
                     // Image 2
@@ -80,7 +235,7 @@ ApplicationWindow {
                         id: image2Panel
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        panelTitle: "Image 2"
+                        panelTitle: "Ortofoto NDVI"
                         colorMaps: mainWindow.colorMaps
                         onImageChanged: {
                             processor.setImage2(imagePath)
@@ -93,14 +248,14 @@ ApplicationWindow {
             Rectangle {
                 Layout.fillHeight: true
                 Layout.preferredWidth: 2
-                color: "#404040"
+                color: mainWindow.borderColor
             }
             
-            // Right panel - Analysis result
+            // Right panel - Analysis result or RGB
             Rectangle {
                 Layout.fillHeight: true
                 Layout.fillWidth: true
-                color: "#2b2b2b"
+                color: mainWindow.backgroundColor
                 
                 ColumnLayout {
                     anchors.fill: parent
@@ -108,34 +263,37 @@ ApplicationWindow {
                     spacing: 10
                     
                     Label {
-                        text: "Analysis Result"
+                        text: rgbImagePath !== "" ? "RGB Orthophoto" : "Analysis Result"
                         font.pixelSize: 18
                         font.bold: true
-                        color: "#ffffff"
+                        color: mainWindow.textColor
                     }
                     
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        color: "#1e1e1e"
-                        border.color: "#404040"
+                        color: mainWindow.panelColor
+                        border.color: mainWindow.borderColor
                         border.width: 1
                         
                         ResultImageViewer {
                             id: resultImage
                             anchors.fill: parent
                             anchors.margins: 5
+                            displayPath: rgbImagePath !== "" ? rgbImagePath : ""
                         }
                     }
                     
                     Button {
                         Layout.alignment: Qt.AlignHCenter
                         text: "Run Analysis"
-                        enabled: processor.hasValidImages
+                        enabled: processor.hasValidImages && rgbImagePath === ""
+                        visible: rgbImagePath === ""
                         onClicked: processor.runAnalysis()
                         
                         background: Rectangle {
-                            color: parent.enabled ? (parent.pressed ? "#0066cc" : "#0080ff") : "#404040"
+                            color: parent.enabled ? (parent.pressed ? mainWindow.buttonPressedColor : 
+                                   (parent.hovered ? mainWindow.buttonHoverColor : mainWindow.buttonColor)) : "#404040"
                             radius: 4
                         }
                         
@@ -154,14 +312,14 @@ ApplicationWindow {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 2
-            color: "#404040"
+            color: mainWindow.borderColor
         }
         
         // Bottom panel - Parameters
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 80
-            color: "#333333"
+            color: mainWindow.panelColor
             
             RowLayout {
                 anchors.fill: parent
@@ -172,7 +330,7 @@ ApplicationWindow {
                     text: "Analysis Parameters:"
                     font.pixelSize: 14
                     font.bold: true
-                    color: "#ffffff"
+                    color: mainWindow.textColor
                 }
                 
                 RowLayout {
@@ -181,8 +339,8 @@ ApplicationWindow {
                     Rectangle {
                         width: 200
                         height: 50
-                        color: "#1e1e1e"
-                        border.color: "#0080ff"
+                        color: mainWindow.panelColor
+                        border.color: mainWindow.buttonColor
                         border.width: 2
                         radius: 5
                         
@@ -193,7 +351,7 @@ ApplicationWindow {
                             Label {
                                 text: "Param1"
                                 font.pixelSize: 11
-                                color: "#888888"
+                                color: mainWindow.textSecondaryColor
                                 Layout.alignment: Qt.AlignHCenter
                             }
                             
@@ -202,7 +360,7 @@ ApplicationWindow {
                                 text: "---"
                                 font.pixelSize: 16
                                 font.bold: true
-                                color: "#00ff00"
+                                color: mainWindow.isDarkTheme ? "#00ff00" : "#008800"
                                 Layout.alignment: Qt.AlignHCenter
                             }
                         }
@@ -211,8 +369,8 @@ ApplicationWindow {
                     Rectangle {
                         width: 200
                         height: 50
-                        color: "#1e1e1e"
-                        border.color: "#0080ff"
+                        color: mainWindow.panelColor
+                        border.color: mainWindow.buttonColor
                         border.width: 2
                         radius: 5
                         
@@ -223,7 +381,7 @@ ApplicationWindow {
                             Label {
                                 text: "Param2"
                                 font.pixelSize: 11
-                                color: "#888888"
+                                color: mainWindow.textSecondaryColor
                                 Layout.alignment: Qt.AlignHCenter
                             }
                             
@@ -232,7 +390,7 @@ ApplicationWindow {
                                 text: "---"
                                 font.pixelSize: 16
                                 font.bold: true
-                                color: "#00ff00"
+                                color: mainWindow.isDarkTheme ? "#00ff00" : "#008800"
                                 Layout.alignment: Qt.AlignHCenter
                             }
                         }
@@ -240,6 +398,81 @@ ApplicationWindow {
                 }
                 
                 Item { Layout.fillWidth: true }
+            }
+        }
+    }
+    
+    // Settings Dialog
+    Dialog {
+        id: settingsDialog
+        title: "Settings"
+        width: 400
+        height: 350
+        modal: true
+        anchors.centerIn: parent
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        
+        onAccepted: {
+            mainWindow.isDarkTheme = darkThemeRadio.checked
+            mainWindow.denoiseEnabled = denoiseCheck.checked
+            mainWindow.areaThreshold = areaSlider.value
+        }
+        
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 15
+            
+            // Appearance section
+            GroupBox {
+                title: "Appearance"
+                Layout.fillWidth: true
+                
+                ColumnLayout {
+                    anchors.fill: parent
+                    
+                    RadioButton {
+                        id: darkThemeRadio
+                        text: "Dark Theme"
+                        checked: mainWindow.isDarkTheme
+                    }
+                    
+                    RadioButton {
+                        id: lightThemeRadio
+                        text: "Light Theme"
+                        checked: !mainWindow.isDarkTheme
+                    }
+                }
+            }
+            
+            // Settings section
+            GroupBox {
+                title: "Processing Settings"
+                Layout.fillWidth: true
+                
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: 10
+                    
+                    CheckBox {
+                        id: denoiseCheck
+                        text: "Denoise"
+                        checked: mainWindow.denoiseEnabled
+                    }
+                    
+                    Label {
+                        text: "Area Threshold: " + areaSlider.value
+                        font.pixelSize: 11
+                    }
+                    
+                    Slider {
+                        id: areaSlider
+                        from: 5
+                        to: 500
+                        value: mainWindow.areaThreshold
+                        stepSize: 1
+                        Layout.fillWidth: true
+                    }
+                }
             }
         }
     }
@@ -259,9 +492,48 @@ ApplicationWindow {
         }
     }
     
+    // File dialogs
+    property string rgbImagePath: ""
+    
+    FileDialog {
+        id: shapefileDialog
+        title: "Select Shapefile Archive"
+        fileMode: FileDialog.OpenFile
+        nameFilters: ["ZIP files (*.zip)", "All files (*)"]
+        onAccepted: {
+            console.log("Shapefile selected:", selectedFile)
+        }
+    }
+    
+    FileDialog {
+        id: rgbDialog
+        title: "Select RGB Orthophoto"
+        fileMode: FileDialog.OpenFile
+        nameFilters: ["Image files (*.tif *.tiff *.jpg *.png)", "All files (*)"]
+        onAccepted: {
+            var path = selectedFile.toString()
+            if (path.startsWith("file:///")) {
+                path = path.substring(8)
+            } else if (path.startsWith("file://")) {
+                path = path.substring(7)
+            }
+            rgbImagePath = path
+            resultImage.displayPath = path
+        }
+    }
+    
     function updateAnalysis() {
-        if (processor.hasValidImages) {
+        if (processor.hasValidImages && rgbImagePath === "") {
             processor.runAnalysis()
         }
+    }
+    
+    function resetSystem() {
+        image1Panel.imagePath = ""
+        image2Panel.imagePath = ""
+        rgbImagePath = ""
+        param1Text.text = "---"
+        param2Text.text = "---"
+        resultImage.displayPath = ""
     }
 }
