@@ -4,5 +4,6 @@
         <file>GeoTiffImagePanel.qml</file>
         <file>GeoTiff3DView.qml</file>
         <file>ResultImageViewer.qml</file>
+        <file>ImageViewerContent.qml</file>
     </qresource>
 </RCC>

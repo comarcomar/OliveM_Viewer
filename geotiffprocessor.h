@@ -54,7 +54,6 @@ public:
     QImage requestImage(const QString &id, QSize *size, const QSize &requestedSize) override;
 
 private:
-    QImage applyColorMap(const QImage &grayscale, int colorMapIndex);
     QVector<QColor> getColorMapColors(int index);
 };
 

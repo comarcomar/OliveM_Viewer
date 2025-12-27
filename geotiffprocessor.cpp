@@ -3,6 +3,8 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QLibrary>
+#include <QUrl>
+#include <cmath>
 #include <gdal_priv.h>
 #include <cpl_conv.h>
 
@@ -169,10 +171,20 @@ GeoTiffImageProvider::GeoTiffImageProvider()
 
 QImage GeoTiffImageProvider::requestImage(const QString &id, QSize *size, const QSize &requestedSize)
 {
-    // Parse the id: "path/to/file.tif?colormap=0"
-    QStringList parts = id.split("?");
-    QString filePath = parts[0];
+    qDebug() << "GeoTiffImageProvider::requestImage called with id:" << id;
     
+    // Parse the id: "encoded_path?colormap=0&t=timestamp"
+    QStringList parts = id.split("?");
+    if (parts.isEmpty()) {
+        qWarning() << "Invalid image ID format";
+        return QImage();
+    }
+    
+    // Decode the file path
+    QString filePath = QUrl::fromPercentEncoding(parts[0].toUtf8());
+    qDebug() << "Decoded file path:" << filePath;
+    
+    // Parse parameters
     int colorMapIndex = 0;
     if (parts.size() > 1) {
         QStringList params = parts[1].split("&");
@@ -182,13 +194,30 @@ QImage GeoTiffImageProvider::requestImage(const QString &id, QSize *size, const 
             }
         }
     }
-
-    // Open the GeoTIFF
-    GDALDataset *dataset = (GDALDataset*)GDALOpen(filePath.toUtf8().constData(), GA_ReadOnly);
-    if (dataset == nullptr) {
-        qWarning() << "Failed to open GeoTIFF for display:" << filePath;
+    
+    qDebug() << "Using colormap index:" << colorMapIndex;
+    
+    // Verify file exists
+    QFileInfo fileInfo(filePath);
+    if (!fileInfo.exists()) {
+        qWarning() << "File does not exist:" << filePath;
+        qWarning() << "Absolute path:" << fileInfo.absoluteFilePath();
         return QImage();
     }
+    
+    qDebug() << "Opening GeoTIFF:" << fileInfo.absoluteFilePath();
+
+    // Open the GeoTIFF with GDAL
+    GDALDataset *dataset = (GDALDataset*)GDALOpen(fileInfo.absoluteFilePath().toUtf8().constData(), GA_ReadOnly);
+    if (dataset == nullptr) {
+        qWarning() << "Failed to open GeoTIFF with GDAL:" << filePath;
+        qWarning() << "GDAL Error:" << CPLGetLastErrorMsg();
+        return QImage();
+    }
+
+    qDebug() << "GDAL dataset opened successfully";
+    qDebug() << "Raster size:" << dataset->GetRasterXSize() << "x" << dataset->GetRasterYSize();
+    qDebug() << "Number of bands:" << dataset->GetRasterCount();
 
     // Get the first band
     GDALRasterBand *band = dataset->GetRasterBand(1);
@@ -200,77 +229,121 @@ QImage GeoTiffImageProvider::requestImage(const QString &id, QSize *size, const 
 
     int width = band->GetXSize();
     int height = band->GetYSize();
+    GDALDataType dataType = band->GetRasterDataType();
+    
+    qDebug() << "Band info - Width:" << width << "Height:" << height << "Type:" << dataType;
 
-    // Read the data
-    float *buffer = new float[width * height];
-    CPLErr err = band->RasterIO(GF_Read, 0, 0, width, height, 
-                                  buffer, width, height, GDT_Float32, 0, 0);
+    // Determine output size (downsample if requested)
+    int outWidth = width;
+    int outHeight = height;
+    
+    if (requestedSize.width() > 0 && requestedSize.height() > 0) {
+        // Calculate aspect-preserving size
+        double aspectRatio = (double)width / height;
+        outWidth = requestedSize.width();
+        outHeight = (int)(outWidth / aspectRatio);
+        
+        if (outHeight > requestedSize.height()) {
+            outHeight = requestedSize.height();
+            outWidth = (int)(outHeight * aspectRatio);
+        }
+        
+        qDebug() << "Downsampling to:" << outWidth << "x" << outHeight;
+    }
+
+    // Allocate buffer for reading data
+    float *buffer = new float[outWidth * outHeight];
+    
+    // Read the data with resampling
+    CPLErr err = band->RasterIO(
+        GF_Read,
+        0, 0,                    // Source offset
+        width, height,           // Source size
+        buffer,                  // Buffer
+        outWidth, outHeight,     // Buffer size
+        GDT_Float32,            // Buffer type
+        0, 0                    // Pixel/line spacing
+    );
 
     if (err != CE_None) {
-        qWarning() << "Failed to read raster data";
+        qWarning() << "Failed to read raster data:" << CPLGetLastErrorMsg();
         delete[] buffer;
         GDALClose(dataset);
         return QImage();
     }
-
-    // Find min/max for normalization
-    double minVal, maxVal, meanVal, stdDev;
-    band->GetStatistics(false, true, &minVal, &maxVal, &meanVal, &stdDev);
-
-    // Create grayscale image
-    QImage image(width, height, QImage::Format_Grayscale8);
     
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
-            float value = buffer[y * width + x];
-            int normalized = static_cast<int>(255.0 * (value - minVal) / (maxVal - minVal + 1e-10));
-            normalized = qBound(0, normalized, 255);
-            image.setPixel(x, y, qRgb(normalized, normalized, normalized));
+    qDebug() << "Raster data read successfully";
+
+    // Get statistics for normalization
+    double minVal, maxVal, meanVal, stdDev;
+    band->ComputeStatistics(false, &minVal, &maxVal, &meanVal, &stdDev, nullptr, nullptr);
+    
+    qDebug() << "Statistics - Min:" << minVal << "Max:" << maxVal << "Mean:" << meanVal << "StdDev:" << stdDev;
+    
+    // Handle invalid statistics
+    if (minVal == maxVal || std::isnan(minVal) || std::isnan(maxVal)) {
+        qWarning() << "Invalid statistics, computing from buffer";
+        minVal = buffer[0];
+        maxVal = buffer[0];
+        for (int i = 1; i < outWidth * outHeight; ++i) {
+            if (!std::isnan(buffer[i]) && !std::isinf(buffer[i])) {
+                if (buffer[i] < minVal) minVal = buffer[i];
+                if (buffer[i] > maxVal) maxVal = buffer[i];
+            }
         }
     }
 
-    delete[] buffer;
-    GDALClose(dataset);
-
-    // Apply color map
-    QImage coloredImage = applyColorMap(image, colorMapIndex);
-
-    if (size) {
-        *size = coloredImage.size();
-    }
-
-    return coloredImage;
-}
-
-QImage GeoTiffImageProvider::applyColorMap(const QImage &grayscale, int colorMapIndex)
-{
+    // Create output image
+    QImage image(outWidth, outHeight, QImage::Format_RGB32);
+    
+    double range = maxVal - minVal;
+    if (range < 1e-10) range = 1.0; // Avoid division by zero
+    
+    // Fill image with color-mapped values
     QVector<QColor> colors = getColorMapColors(colorMapIndex);
     
-    QImage result(grayscale.width(), grayscale.height(), QImage::Format_RGB32);
-    
-    for (int y = 0; y < grayscale.height(); ++y) {
-        for (int x = 0; x < grayscale.width(); ++x) {
-            int gray = qGray(grayscale.pixel(x, y));
-            float position = gray / 255.0f;
+    for (int y = 0; y < outHeight; ++y) {
+        QRgb *scanLine = (QRgb*)image.scanLine(y);
+        for (int x = 0; x < outWidth; ++x) {
+            float value = buffer[y * outWidth + x];
             
-            // Interpolate color
-            int index = static_cast<int>(position * (colors.size() - 1));
-            index = qBound(0, index, colors.size() - 2);
+            // Handle NaN and Inf
+            if (std::isnan(value) || std::isinf(value)) {
+                scanLine[x] = qRgb(0, 0, 0); // Black for invalid values
+                continue;
+            }
             
-            float localPos = position * (colors.size() - 1) - index;
+            // Normalize to 0-1
+            double normalized = (value - minVal) / range;
+            normalized = qBound(0.0, normalized, 1.0);
             
-            QColor c1 = colors[index];
-            QColor c2 = colors[index + 1];
+            // Map to color
+            int colorIndex = (int)(normalized * (colors.size() - 1));
+            colorIndex = qBound(0, colorIndex, colors.size() - 2);
+            
+            double localPos = normalized * (colors.size() - 1) - colorIndex;
+            
+            QColor c1 = colors[colorIndex];
+            QColor c2 = colors[colorIndex + 1];
             
             int r = c1.red() + localPos * (c2.red() - c1.red());
             int g = c1.green() + localPos * (c2.green() - c1.green());
             int b = c1.blue() + localPos * (c2.blue() - c1.blue());
             
-            result.setPixel(x, y, qRgb(r, g, b));
+            scanLine[x] = qRgb(qBound(0, r, 255), qBound(0, g, 255), qBound(0, b, 255));
         }
     }
+
+    delete[] buffer;
+    GDALClose(dataset);
     
-    return result;
+    if (size) {
+        *size = image.size();
+    }
+    
+    qDebug() << "Image generation complete:" << image.size();
+
+    return image;
 }
 
 QVector<QColor> GeoTiffImageProvider::getColorMapColors(int index)

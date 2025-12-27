@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
+import QtQuick.Window
 
 Item {
     id: root
@@ -14,39 +15,191 @@ Item {
     
     signal imageChanged(string imagePath)
     
+    // Detached window for image
+    Window {
+        id: detachedWindow
+        visible: false
+        width: 800
+        height: 600
+        title: root.panelTitle + " - Detached View"
+        
+        Rectangle {
+            anchors.fill: parent
+            color: "#1e1e1e"
+            
+            ImageViewerContent {
+                anchors.fill: parent
+                imagePath: root.imagePath
+                colorMapIndex: root.currentColorMap
+                showLegend: true
+            }
+        }
+    }
+    
     ColumnLayout {
         anchors.fill: parent
         spacing: 5
         
-        // Header
-        RowLayout {
+        // Header with title and controls
+        Rectangle {
             Layout.fillWidth: true
-            spacing: 10
+            Layout.preferredHeight: 45
+            color: "#2a2a2a"
+            border.color: "#404040"
+            border.width: 1
+            radius: 3
             
-            Label {
-                text: root.panelTitle
-                font.pixelSize: 14
-                font.bold: true
-                color: "#ffffff"
-            }
-            
-            Item { Layout.fillWidth: true }
-            
-            Button {
-                text: "Load TIFF"
-                onClicked: fileDialog.open()
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 5
+                spacing: 5
                 
-                background: Rectangle {
-                    color: parent.pressed ? "#006600" : "#008800"
-                    radius: 3
+                Label {
+                    text: root.panelTitle
+                    font.pixelSize: 14
+                    font.bold: true
+                    color: "#ffffff"
                 }
                 
-                contentItem: Text {
-                    text: parent.text
-                    color: "#ffffff"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    font.pixelSize: 11
+                Item { Layout.fillWidth: true }
+                
+                // Zoom In
+                ToolButton {
+                    implicitWidth: 32
+                    implicitHeight: 32
+                    enabled: root.imagePath !== ""
+                    
+                    contentItem: Text {
+                        text: "+"
+                        font.pixelSize: 18
+                        font.bold: true
+                        color: parent.enabled ? "#ffffff" : "#666666"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    
+                    background: Rectangle {
+                        color: parent.pressed ? "#0066cc" : (parent.hovered ? "#004499" : "#003366")
+                        radius: 3
+                    }
+                    
+                    onClicked: imageViewer.zoomIn()
+                    
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Zoom In"
+                    ToolTip.delay: 500
+                }
+                
+                // Zoom Out
+                ToolButton {
+                    implicitWidth: 32
+                    implicitHeight: 32
+                    enabled: root.imagePath !== ""
+                    
+                    contentItem: Text {
+                        text: "−"
+                        font.pixelSize: 18
+                        font.bold: true
+                        color: parent.enabled ? "#ffffff" : "#666666"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    
+                    background: Rectangle {
+                        color: parent.pressed ? "#0066cc" : (parent.hovered ? "#004499" : "#003366")
+                        radius: 3
+                    }
+                    
+                    onClicked: imageViewer.zoomOut()
+                    
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Zoom Out"
+                    ToolTip.delay: 500
+                }
+                
+                // Reset View
+                ToolButton {
+                    implicitWidth: 32
+                    implicitHeight: 32
+                    enabled: root.imagePath !== ""
+                    
+                    contentItem: Text {
+                        text: "⟲"
+                        font.pixelSize: 16
+                        color: parent.enabled ? "#ffffff" : "#666666"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    
+                    background: Rectangle {
+                        color: parent.pressed ? "#0066cc" : (parent.hovered ? "#004499" : "#003366")
+                        radius: 3
+                    }
+                    
+                    onClicked: imageViewer.resetView()
+                    
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Reset View"
+                    ToolTip.delay: 500
+                }
+                
+                Rectangle {
+                    width: 1
+                    height: 30
+                    color: "#404040"
+                }
+                
+                // Detach Window
+                ToolButton {
+                    implicitWidth: 32
+                    implicitHeight: 32
+                    enabled: root.imagePath !== ""
+                    
+                    contentItem: Text {
+                        text: "⧉"
+                        font.pixelSize: 16
+                        color: parent.enabled ? "#ffffff" : "#666666"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    
+                    background: Rectangle {
+                        color: parent.pressed ? "#0066cc" : (parent.hovered ? "#004499" : "#003366")
+                        radius: 3
+                    }
+                    
+                    onClicked: detachedWindow.visible = !detachedWindow.visible
+                    
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Detach Window"
+                    ToolTip.delay: 500
+                }
+                
+                Rectangle {
+                    width: 1
+                    height: 30
+                    color: "#404040"
+                }
+                
+                // Load Button
+                Button {
+                    text: "Load TIFF"
+                    implicitHeight: 32
+                    
+                    onClicked: fileDialog.open()
+                    
+                    background: Rectangle {
+                        color: parent.pressed ? "#006600" : (parent.hovered ? "#007700" : "#008800")
+                        radius: 3
+                    }
+                    
+                    contentItem: Text {
+                        text: parent.text
+                        color: "#ffffff"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        font.pixelSize: 11
+                    }
                 }
             }
         }
@@ -68,29 +221,18 @@ Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     
-                    // 2D Image view
-                    Image {
-                        id: imageView
+                    // 2D Image view with pan/zoom
+                    ImageViewerContent {
+                        id: imageViewer
                         anchors.fill: parent
                         anchors.margins: 5
-                        fillMode: Image.PreserveAspectFit
                         visible: !root.show3D
-                        source: root.imagePath !== "" ? "image://geotiff/" + root.imagePath + "?colormap=" + root.currentColorMap : ""
-                        
-                        BusyIndicator {
-                            anchors.centerIn: parent
-                            running: imageView.status === Image.Loading
-                        }
-                        
-                        Label {
-                            anchors.centerIn: parent
-                            text: "No image loaded"
-                            color: "#666666"
-                            visible: root.imagePath === "" && imageView.status !== Image.Loading
-                        }
+                        imagePath: root.imagePath
+                        colorMapIndex: root.currentColorMap
+                        showLegend: false
                     }
                     
-                    // 3D view placeholder
+                    // 3D view
                     GeoTiff3DView {
                         id: view3D
                         anchors.fill: parent
@@ -204,7 +346,16 @@ Item {
         nameFilters: ["GeoTIFF files (*.tif *.tiff)", "All files (*)"]
         
         onAccepted: {
-            root.imagePath = selectedFile.toString().replace("file://", "")
+            var path = selectedFile.toString()
+            // Remove file:/// prefix
+            if (path.startsWith("file:///")) {
+                path = path.substring(8)
+            } else if (path.startsWith("file://")) {
+                path = path.substring(7)
+            }
+            
+            console.log("Loading image from:", path)
+            root.imagePath = path
             root.imageChanged(root.imagePath)
         }
     }
@@ -217,13 +368,11 @@ Item {
         var colors = root.colorMaps[root.currentColorMap].colors
         var index = Math.floor(position * (colors.length - 1))
         var nextIndex = Math.min(index + 1, colors.length - 1)
-        var localPos = position * (colors.length - 1) - index
         
-        // Simple color interpolation
-        if (localPos < 0.01) {
+        if (index === nextIndex) {
             return colors[index]
         }
         
-        return colors[index] // Simplified - full interpolation would be in C++
+        return colors[index]
     }
 }
