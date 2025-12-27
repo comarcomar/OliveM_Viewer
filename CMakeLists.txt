@@ -23,22 +23,51 @@ if(MSVC)
         /utf-8              # UTF-8 source and execution
     )
     
+    # MSVC 2022 specific optimizations
+    if(MSVC_VERSION GREATER_EQUAL 1930)
+        add_compile_options(
+            /Zc:inline          # Remove unreferenced functions/data
+            /Zc:preprocessor    # Enable conforming preprocessor (C11/C17)
+        )
+        message(STATUS "Detected MSVC 2022 or later (${MSVC_VERSION})")
+    elseif(MSVC_VERSION GREATER_EQUAL 1920)
+        message(STATUS "Detected MSVC 2019 (${MSVC_VERSION})")
+    endif()
+    
     # MSVC linker flags
     add_link_options(
         /MANIFEST:NO        # Don't generate manifest
         /INCREMENTAL:NO     # Disable incremental linking for release
     )
+    
+    # Release optimizations
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        add_compile_options(/O2 /Oi /Ot /GL)
+        add_link_options(/LTCG /OPT:REF /OPT:ICF)
+    endif()
 endif()
 
-# Set Qt installation path hints for MSVC 2019
+# Set Qt installation path hints for MSVC 2019/2022
 if(MSVC AND NOT DEFINED CMAKE_PREFIX_PATH)
-    # Common Qt6 installation paths for MSVC 2019
+    # Common Qt6 installation paths for MSVC 2019 and 2022
     set(QT6_POSSIBLE_PATHS
-        "C:/Qt/6.5.0/msvc2019_64"
-        "C:/Qt/6.6.0/msvc2019_64"
+        # MSVC 2022 paths
+        "C:/Qt/6.8.0/msvc2022_64"
+        "C:/Qt/6.7.0/msvc2022_64"
+        "C:/Qt/6.6.0/msvc2022_64"
+        "C:/Qt/6.5.3/msvc2022_64"
+        "C:/Qt/6.5.0/msvc2022_64"
+        # MSVC 2019 paths (backward compatibility)
+        "C:/Qt/6.8.0/msvc2019_64"
         "C:/Qt/6.7.0/msvc2019_64"
+        "C:/Qt/6.6.0/msvc2019_64"
         "C:/Qt/6.5.3/msvc2019_64"
-        "C:/Qt6/6.5.0/msvc2019_64"
+        "C:/Qt/6.5.0/msvc2019_64"
+        # Alternative installation paths
+        "C:/Qt6/6.8.0/msvc2022_64"
+        "C:/Qt6/6.7.0/msvc2022_64"
+        "C:/Qt6/6.6.0/msvc2022_64"
+        "C:/Qt6/6.5.0/msvc2022_64"
     )
     
     foreach(QT_PATH ${QT6_POSSIBLE_PATHS})
@@ -51,7 +80,8 @@ if(MSVC AND NOT DEFINED CMAKE_PREFIX_PATH)
     
     if(NOT CMAKE_PREFIX_PATH)
         message(WARNING "Qt6 not found in common locations. Please set CMAKE_PREFIX_PATH manually.")
-        message(STATUS "Example: cmake -DCMAKE_PREFIX_PATH=C:/Qt/6.5.0/msvc2019_64 ..")
+        message(STATUS "Example for MSVC 2022: cmake -DCMAKE_PREFIX_PATH=C:/Qt/6.8.0/msvc2022_64 ..")
+        message(STATUS "Example for MSVC 2019: cmake -DCMAKE_PREFIX_PATH=C:/Qt/6.5.0/msvc2019_64 ..")
     endif()
 endif()
 
@@ -73,6 +103,15 @@ if(WIN32)
         set(GDAL_LIBRARY "${GDAL_DIR}/lib/gdal_i.lib")
         
         message(STATUS "Using OSGeo4W64 GDAL")
+        message(STATUS "GDAL Include: ${GDAL_INCLUDE_DIR}")
+        message(STATUS "GDAL Library: ${GDAL_LIBRARY}")
+    elseif(NOT DEFINED GDAL_DIR AND EXISTS "C:/OSGeo4W")
+        # Fallback to 32-bit OSGeo4W
+        set(GDAL_DIR "C:/OSGeo4W")
+        set(GDAL_INCLUDE_DIR "${GDAL_DIR}/include")
+        set(GDAL_LIBRARY "${GDAL_DIR}/lib/gdal_i.lib")
+        
+        message(STATUS "Using OSGeo4W (32-bit) GDAL")
         message(STATUS "GDAL Include: ${GDAL_INCLUDE_DIR}")
         message(STATUS "GDAL Library: ${GDAL_LIBRARY}")
     endif()
@@ -137,6 +176,8 @@ if(WIN32)
     get_target_property(QT6_QMAKE_EXECUTABLE Qt6::qmake IMPORTED_LOCATION)
     get_filename_component(QT6_BIN_DIR "${QT6_QMAKE_EXECUTABLE}" DIRECTORY)
     
+    message(STATUS "Qt6 bin directory: ${QT6_BIN_DIR}")
+    
     # Deploy Qt dependencies using windeployqt6
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND "${QT6_BIN_DIR}/windeployqt6.exe"
@@ -145,36 +186,49 @@ if(WIN32)
             --no-system-d3d-compiler
             --no-opengl-sw
             "$<TARGET_FILE:${PROJECT_NAME}>"
-        COMMENT "Deploying Qt6 dependencies..."
+        COMMENT "Deploying Qt6 dependencies with windeployqt6..."
+        VERBATIM
     )
     
     # Copy GDAL DLLs
     if(EXISTS "${GDAL_DIR}/bin")
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${GDAL_DIR}/bin"
-                "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
-            COMMENT "Copying GDAL DLLs..."
-        )
+        file(GLOB GDAL_DLLS "${GDAL_DIR}/bin/*.dll")
+        foreach(DLL_FILE ${GDAL_DLLS})
+            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${DLL_FILE}"
+                    "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+                COMMENT "Copying ${DLL_FILE}..."
+            )
+        endforeach()
     endif()
     
     # Copy OliveMatrixLib.dll if it exists
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/OliveMatrixLib.dll")
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${CMAKE_CURRENT_SOURCE_DIR}/OliveMatrixLib.dll"
                 "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
             COMMENT "Copying OliveMatrixLib.dll..."
         )
     endif()
     
-    # Create a batch file to run the application
+    # Create a batch file to run the application with proper PATH
+    set(RUN_BAT_CONTENT "@echo off\nset PATH=%PATH%;${GDAL_DIR}\\bin\n\"$<TARGET_FILE:${PROJECT_NAME}>\"\n")
+    file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/run_$<CONFIG>.bat" CONTENT "${RUN_BAT_CONTENT}")
+    
+    # Create a convenient run.bat that detects the build type
     file(WRITE "${CMAKE_BINARY_DIR}/run.bat" 
 "@echo off
-set PATH=%PATH%;${GDAL_DIR}/bin
-\"$<TARGET_FILE:${PROJECT_NAME}>\"
-"
-    )
+if exist \"${CMAKE_BINARY_DIR}/Release/${PROJECT_NAME}.exe\" (
+    call \"${CMAKE_BINARY_DIR}/run_Release.bat\"
+) else if exist \"${CMAKE_BINARY_DIR}/Debug/${PROJECT_NAME}.exe\" (
+    call \"${CMAKE_BINARY_DIR}/run_Debug.bat\"
+) else (
+    echo Error: Executable not found. Please build the project first.
+    pause
+)
+")
 endif()
 
 # Installation
@@ -191,11 +245,22 @@ if(WIN32)
         DESTINATION bin
         FILES_MATCHING
         PATTERN "*.dll"
-        PATTERN "*.exe"
+        PATTERN "*.exe" EXCLUDE
+    )
+    
+    # Install Qt plugins
+    install(DIRECTORY "$<TARGET_FILE_DIR:${PROJECT_NAME}>/plugins"
+        DESTINATION bin
+        OPTIONAL
     )
     
     # Install QML modules
     install(DIRECTORY "$<TARGET_FILE_DIR:${PROJECT_NAME}>/QtQuick"
+        DESTINATION bin
+        OPTIONAL
+    )
+    
+    install(DIRECTORY "$<TARGET_FILE_DIR:${PROJECT_NAME}>/QtQuick3D"
         DESTINATION bin
         OPTIONAL
     )
@@ -206,8 +271,15 @@ if(WIN32)
     set(CPACK_GENERATOR "NSIS;ZIP")
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
     set(CPACK_NSIS_MODIFY_PATH ON)
-    set(CPACK_NSIS_MUI_ICON "${CMAKE_CURRENT_SOURCE_DIR}/icon.ico")
-    set(CPACK_NSIS_MUI_UNIICON "${CMAKE_CURRENT_SOURCE_DIR}/icon.ico")
+    set(CPACK_NSIS_DISPLAY_NAME "Olive GeoTIFF Viewer")
+    set(CPACK_NSIS_PACKAGE_NAME "OliveGeoTiffViewer")
+    set(CPACK_NSIS_CONTACT "support@olive-analysis.example.com")
+    
+    # Optional: Add icon if available
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/icon.ico")
+        set(CPACK_NSIS_MUI_ICON "${CMAKE_CURRENT_SOURCE_DIR}/icon.ico")
+        set(CPACK_NSIS_MUI_UNIICON "${CMAKE_CURRENT_SOURCE_DIR}/icon.ico")
+    endif()
 else()
     set(CPACK_GENERATOR "TGZ")
 endif()
@@ -225,15 +297,31 @@ include(CPack)
 
 # Print configuration summary
 message(STATUS "")
-message(STATUS "=== Configuration Summary ===")
+message(STATUS "========================================")
+message(STATUS "  Configuration Summary")
+message(STATUS "========================================")
 message(STATUS "CMake Version: ${CMAKE_VERSION}")
+message(STATUS "Generator: ${CMAKE_GENERATOR}")
 message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
+if(MSVC_VERSION)
+    if(MSVC_VERSION GREATER_EQUAL 1930)
+        message(STATUS "  - MSVC 2022 (v${MSVC_VERSION})")
+    elseif(MSVC_VERSION GREATER_EQUAL 1920)
+        message(STATUS "  - MSVC 2019 (v${MSVC_VERSION})")
+    else()
+        message(STATUS "  - MSVC (v${MSVC_VERSION})")
+    endif()
+endif()
 message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "Qt6 Location: ${CMAKE_PREFIX_PATH}")
+message(STATUS "Qt6 Version: ${Qt6_VERSION}")
 if(WIN32 AND DEFINED GDAL_DIR)
     message(STATUS "GDAL Location: ${GDAL_DIR}")
+    message(STATUS "GDAL Include: ${GDAL_INCLUDE_DIR}")
+    message(STATUS "GDAL Library: ${GDAL_LIBRARY}")
 endif()
-message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "Output Directory: ${CMAKE_BINARY_DIR}")
-message(STATUS "=============================")
+message(STATUS "Install Prefix: ${CMAKE_INSTALL_PREFIX}")
+message(STATUS "========================================")
 message(STATUS "")

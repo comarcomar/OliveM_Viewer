@@ -80,13 +80,16 @@ bool RunAnalysis(
 ## Requisiti di Sistema
 
 ### Dipendenze Software
-- **Qt 6.2+** (raccomandato Qt 6.5 o superiore)
+- **Qt 6.2+** (raccomandato Qt 6.5+ o 6.8 LTS)
   - QtQuick
   - QtQuick.Controls
   - QtQuick3D (sostituisce Qt3D)
   - QtQuick.Dialogs
 - **GDAL 3.x** (Geospatial Data Abstraction Library)
 - **C++17** compiler
+  - Windows: Visual Studio 2022 (raccomandato) o 2019
+  - Linux: GCC 9+ o Clang 10+
+  - macOS: Apple Clang 12+
 
 ### Librerie Esterne
 - **OliveMatrixLib.dll** (opzionale, con fallback per testing)

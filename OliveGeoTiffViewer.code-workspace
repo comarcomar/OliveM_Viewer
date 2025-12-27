@@ -16,8 +16,12 @@
             "/usr/include/qt6/**",
             "/usr/include/x86_64-linux-gnu/qt6/**",
             "/usr/include/gdal/**",
+            "C:/Qt/6.8.0/msvc2022_64/include/**",
+            "C:/Qt/6.7.0/msvc2022_64/include/**",
+            "C:/Qt/6.6.0/msvc2022_64/include/**",
             "C:/Qt/6.5.0/msvc2019_64/include/**",
-            "C:/OSGeo4W64/include/**"
+            "C:/OSGeo4W64/include/**",
+            "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/*/include/**"
         ],
         "C_Cpp.default.defines": [
             "QT_QML_DEBUG",
