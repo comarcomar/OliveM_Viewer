@@ -4,7 +4,16 @@
 #include <QObject>
 #include <QString>
 #include <QImage>
+<<<<<<< HEAD
+#include <QQuickImageProvider>
+#include <QThread>
+#include <QVariantMap>
+
+// Forward declaration for GDAL
+class GDALDataset;
+=======
 #include <gdal_priv.h>
+>>>>>>> c7b3856baee19c6fe1f00054241d88c0e7d57791
 
 class GeoTiffProcessor : public QObject
 {
@@ -27,8 +36,17 @@ public:
     QImage getImage2() const { return m_image2; }
 
 public slots:
+<<<<<<< HEAD
+    void setImage1(const QString &path);
+    void setImage2(const QString &path);
+    void runAnalysis();
+    QVariantMap getImageStatistics(const QString &imagePath);
+    QVariantList getHeightData(const QString &imagePath, int maxWidth, int maxHeight);
+    void clearCache();
+=======
     // Reset method to clear all loaded images and state
     void reset();
+>>>>>>> c7b3856baee19c6fe1f00054241d88c0e7d57791
 
 signals:
     void imagesChanged();

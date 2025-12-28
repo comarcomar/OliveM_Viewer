@@ -474,3 +474,21 @@ QVariantList GeoTiffProcessor::getHeightData(const QString &imagePath, int maxWi
     qDebug() << "Generated" << result.size() << "height data points";
     return result;
 }
+<<<<<<< HEAD
+
+void GeoTiffProcessor::clearCache()
+{
+    qDebug() << "Clearing processor cache...";
+    
+    // Just clear the paths, don't destroy GDAL
+    m_image1Path.clear();
+    m_image2Path.clear();
+    m_hasImage1 = false;
+    m_hasImage2 = false;
+    
+    emit imagesChanged();
+    
+    qDebug() << "Cache cleared";
+}
+=======
+>>>>>>> c7b3856baee19c6fe1f00054241d88c0e7d57791
