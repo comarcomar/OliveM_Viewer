@@ -34,6 +34,22 @@ Item {
         title: root.panelTitle + " - Detached View"
         color: root.themeColors.panelColor
         
+        onVisibleChanged: {
+            if (visible) {
+                console.log("Detached window opened for:", root.panelTitle)
+            }
+        }
+        
+        Connections {
+            target: root
+            function onImagePathChanged() {
+                if (root.imagePath === "" && detachedWindow.visible) {
+                    console.log("Closing detached window - image cleared")
+                    detachedWindow.visible = false
+                }
+            }
+        }
+        
         ColumnLayout {
             anchors.fill: parent
             spacing: 0
@@ -408,53 +424,53 @@ Item {
                         anchors.rightMargin: 5
                         spacing: 5
                         
+                        Text {
+                            text: colorMapCombo.displayText
+                            color: root.themeColors.textColor
+                            verticalAlignment: Text.AlignVCenter
+                            font.pixelSize: 11
+                            Layout.fillWidth: true
+                        }
+                        
                         Rectangle {
                             width: 40
                             height: 14
-                        visible: root.colorMaps.length > 0 && colorMapCombo.currentIndex >= 0
-                        gradient: Gradient {
-                            orientation: Gradient.Horizontal
-                            GradientStop {
-                                position: 0.0
-                                color: {
-                                    if (root.colorMaps.length > 0 && colorMapCombo.currentIndex < root.colorMaps.length) {
-                                        return root.colorMaps[colorMapCombo.currentIndex].colors[0]
+                            visible: root.colorMaps.length > 0 && colorMapCombo.currentIndex >= 0
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop {
+                                    position: 0.0
+                                    color: {
+                                        if (root.colorMaps.length > 0 && colorMapCombo.currentIndex < root.colorMaps.length) {
+                                            return root.colorMaps[colorMapCombo.currentIndex].colors[0]
+                                        }
+                                        return "#000000"
                                     }
-                                    return "#000000"
+                                }
+                                GradientStop {
+                                    position: 0.5
+                                    color: {
+                                        if (root.colorMaps.length > 0 && colorMapCombo.currentIndex < root.colorMaps.length) {
+                                            var colors = root.colorMaps[colorMapCombo.currentIndex].colors
+                                            return colors[Math.floor(colors.length / 2)]
+                                        }
+                                        return "#888888"
+                                    }
+                                }
+                                GradientStop {
+                                    position: 1.0
+                                    color: {
+                                        if (root.colorMaps.length > 0 && colorMapCombo.currentIndex < root.colorMaps.length) {
+                                            var colors = root.colorMaps[colorMapCombo.currentIndex].colors
+                                            return colors[colors.length - 1]
+                                        }
+                                        return "#ffffff"
+                                    }
                                 }
                             }
-                            GradientStop {
-                                position: 0.5
-                                color: {
-                                    if (root.colorMaps.length > 0 && colorMapCombo.currentIndex < root.colorMaps.length) {
-                                        var colors = root.colorMaps[colorMapCombo.currentIndex].colors
-                                        return colors[Math.floor(colors.length / 2)]
-                                    }
-                                    return "#888888"
-                                }
-                            }
-                            GradientStop {
-                                position: 1.0
-                                color: {
-                                    if (root.colorMaps.length > 0 && colorMapCombo.currentIndex < root.colorMaps.length) {
-                                        var colors = root.colorMaps[colorMapCombo.currentIndex].colors
-                                        return colors[colors.length - 1]
-                                    }
-                                    return "#ffffff"
-                                }
-                            }
+                            border.color: root.themeColors.borderColor
+                            border.width: 1
                         }
-                        border.color: root.themeColors.borderColor
-                        border.width: 1
-                    }
-                    
-                    Text {
-                        text: colorMapCombo.displayText
-                        color: root.themeColors.textColor
-                        verticalAlignment: Text.AlignVCenter
-                        font.pixelSize: 11
-                        Layout.fillWidth: true
-                    }
                     }
                 }
                 

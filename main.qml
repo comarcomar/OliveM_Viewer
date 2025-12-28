@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
+import Qt.labs.settings
 import GeoTiffProcessor
 
 ApplicationWindow {
@@ -25,6 +26,16 @@ ApplicationWindow {
     // Settings
     property bool denoiseEnabled: true
     property int areaThreshold: 70
+    
+    // Persistent settings
+    Settings {
+        id: appSettings
+        category: "Application"
+        
+        property alias isDarkTheme: mainWindow.isDarkTheme
+        property alias denoiseEnabled: mainWindow.denoiseEnabled
+        property alias areaThreshold: mainWindow.areaThreshold
+    }
     
     // Processor backend
     GeoTiffProcessor {
@@ -122,7 +133,7 @@ ApplicationWindow {
         // Input controls panel
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 80
+            Layout.preferredHeight: 40
             color: mainWindow.panelColor
             border.color: mainWindow.borderColor
             border.width: 1
@@ -143,7 +154,7 @@ ApplicationWindow {
                 
                 Button {
                     text: "Shapefile (.zip)"
-                    implicitHeight: 35
+                    implicitHeight: 28
                     onClicked: shapefileDialog.open()
                     
                     background: Rectangle {
@@ -163,7 +174,7 @@ ApplicationWindow {
                 
                 Button {
                     text: "RGB Orthophoto"
-                    implicitHeight: 35
+                    implicitHeight: 28
                     onClicked: rgbDialog.open()
                     
                     background: Rectangle {
@@ -188,29 +199,6 @@ ApplicationWindow {
                     color: mainWindow.textSecondaryColor
                     elide: Text.ElideMiddle
                     Layout.fillWidth: true
-                }
-                
-                Button {
-                    text: "Run Analysis"
-                    implicitHeight: 40
-                    enabled: processor.hasValidImages && rgbImagePath === ""
-                    visible: rgbImagePath === ""
-                    onClicked: processor.runAnalysis()
-                    
-                    background: Rectangle {
-                        color: parent.enabled ? (parent.pressed ? "#006600" : 
-                               (parent.hovered ? "#008800" : "#00aa00")) : "#404040"
-                        radius: 4
-                    }
-                    
-                    contentItem: Text {
-                        text: parent.text
-                        color: "#ffffff"
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                        font.pixelSize: 13
-                        font.bold: true
-                    }
                 }
                 
                 Item { Layout.fillWidth: true }
@@ -310,6 +298,30 @@ ApplicationWindow {
                         font.pixelSize: 18
                         font.bold: true
                         color: mainWindow.textColor
+                    }
+                    
+                    Button {
+                        text: "Run Analysis"
+                        Layout.preferredHeight: 35
+                        Layout.preferredWidth: 150
+                        enabled: processor.hasValidImages && rgbImagePath === ""
+                        visible: rgbImagePath === ""
+                        onClicked: processor.runAnalysis()
+                        
+                        background: Rectangle {
+                            color: parent.enabled ? (parent.pressed ? "#006600" : 
+                                   (parent.hovered ? "#008800" : "#00aa00")) : "#404040"
+                            radius: 4
+                        }
+                        
+                        contentItem: Text {
+                            text: parent.text
+                            color: "#ffffff"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            font.pixelSize: 13
+                            font.bold: true
+                        }
                     }
                     
                     Rectangle {

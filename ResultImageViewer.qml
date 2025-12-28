@@ -52,12 +52,16 @@ Item {
     
     onDisplayPathChanged: {
         console.log("=== DisplayPath changed to:", displayPath)
-        loadCurrentImage()
+        if (displayPath !== "" || resultPath !== "") {
+            loadCurrentImage()
+        } else {
+            resultImage.source = ""
+        }
     }
     
     onResultPathChanged: {
         console.log("=== ResultPath changed to:", resultPath)
-        if (displayPath === "") {
+        if (displayPath === "" && resultPath !== "") {
             loadCurrentImage()
         }
     }
