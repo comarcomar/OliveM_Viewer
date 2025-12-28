@@ -1,8 +1,75 @@
+<<<<<<< HEAD
+
+name: Claude Code (Issues only)
+=======
 name: Claude Code
+>>>>>>> c7b3856baee19c6fe1f00054241d88c0e7d57791
 
 on:
+  issues:
+    types: [opened, assigned]
   issue_comment:
     types: [created]
+<<<<<<< HEAD
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+jobs:
+  claude:
+    # Reagisce solo a issue e commenti su issue (non PR) che contengono '@claude'
+    if: |
+      (
+        github.event_name == 'issues' &&
+        (
+          contains(github.event.issue.title, '@claude') ||
+          contains(github.event.issue.body, '@claude')
+        )
+      )
+      ||
+      (
+        github.event_name == 'issue_comment' &&
+        contains(github.event.comment.body, '@claude') &&
+        !github.event.issue.pull_request
+      )
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Print event context
+        run: |
+          echo "event_name=${{ github.event_name }}"
+          echo "repo=${{ github.repository }}"
+          echo "actor=${{ github.actor }}"
+          echo "is_issue_on_pr=$([ -n "${{ github.event.issue.pull_request.url || '' }}" ] && echo true || echo false)"
+          echo "issue_number=${{ github.event.issue.number }}"
+
+      - name: Verify secret presence
+        run: |
+          if [ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+            echo "❌ Secret ANTHROPIC_API_KEY non visibile in questo contesto."
+            echo "   Possibili cause: permissions delle Actions 'Read-only' oppure secret non definito."
+            exit 1
+          else
+            echo "✅ Secret ANTHROPIC_API_KEY visibile."
+          fi
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # trigger_phrase: "/claude"
+          # claude_args: |
+          #   --model claude-3-sonnet-20240229
+          #   --max-turns 10
+          #   --allowedTools "Bash(npm run test:*),Bash(npm run lint:*)"
+=======
   pull_request_review_comment:
     types: [created]
   issues:
@@ -56,3 +123,4 @@ jobs:
           #       "NODE_ENV": "test"
           #     }
           #   }
+>>>>>>> c7b3856baee19c6fe1f00054241d88c0e7d57791
