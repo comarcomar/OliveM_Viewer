@@ -67,27 +67,62 @@ Item {
                     smooth: false
                     scale: root.zoomLevel
                     
-                    source: {
-                        if (root.imagePath === "") return ""
-                        var cleanPath = root.imagePath
-                        if (cleanPath.startsWith("file:///")) cleanPath = cleanPath.substring(8)
-                        else if (cleanPath.startsWith("file://")) cleanPath = cleanPath.substring(7)
-                        var encodedPath = encodeURIComponent(cleanPath)
-                        return "image://geotiff/" + encodedPath + "?colormap=" + root.colorMapIndex + "&t=" + Date.now()
+                    Component.onCompleted: {
+                        console.log("ImageViewerContent created")
+                    }
+                    
+                    Connections {
+                        target: root
+                        function onImagePathChanged() {
+                            console.log("ImageViewerContent: imagePath changed to:", root.imagePath)
+                            reloadImage()
+                        }
+                        function onColorMapIndexChanged() {
+                            console.log("ImageViewerContent: colorMapIndex changed to:", root.colorMapIndex)
+                            if (root.imagePath !== "") {
+                                reloadImage()
+                            }
+                        }
+                    }
+                    
+                    function reloadImage() {
+                        imageView.source = ""
+                        if (root.imagePath !== "") {
+                            var cleanPath = root.imagePath
+                            if (cleanPath.startsWith("file:///")) cleanPath = cleanPath.substring(8)
+                            else if (cleanPath.startsWith("file://")) cleanPath = cleanPath.substring(7)
+                            var encodedPath = encodeURIComponent(cleanPath)
+                            var newSource = "image://geotiff/" + encodedPath + "?colormap=" + root.colorMapIndex + "&t=" + Date.now()
+                            console.log("Loading image source:", newSource)
+                            imageView.source = newSource
+                        }
                     }
                     
                     onStatusChanged: {
                         if (status === Image.Ready) {
                             hideInstructionsTimer.restart()
-                            if (sourceSize.width > 0 && sourceSize.height > 0) {
-                                var aspectRatio = sourceSize.width / sourceSize.height
-                                if (flickable.width / flickable.height > aspectRatio) {
-                                    imageView.width = flickable.height * aspectRatio
-                                    imageView.height = flickable.height
-                                } else {
-                                    imageView.width = flickable.width
-                                    imageView.height = flickable.width / aspectRatio
-                                }
+                            updateImageSize()
+                        } else if (status === Image.Error) {
+                            console.error("Failed to load image:", source)
+                        }
+                    }
+                    
+                    // Update size when flickable size changes
+                    Connections {
+                        target: flickable
+                        function onWidthChanged() { if (imageView.status === Image.Ready) updateImageSize() }
+                        function onHeightChanged() { if (imageView.status === Image.Ready) updateImageSize() }
+                    }
+                    
+                    function updateImageSize() {
+                        if (sourceSize.width > 0 && sourceSize.height > 0) {
+                            var aspectRatio = sourceSize.width / sourceSize.height
+                            if (flickable.width / flickable.height > aspectRatio) {
+                                imageView.width = flickable.height * aspectRatio
+                                imageView.height = flickable.height
+                            } else {
+                                imageView.width = flickable.width
+                                imageView.height = flickable.width / aspectRatio
                             }
                         }
                     }

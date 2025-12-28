@@ -41,7 +41,10 @@ ApplicationWindow {
     GeoTiffProcessor {
         id: processor
         onAnalysisCompleted: {
-            resultImage.updateImage(resultPath)
+            // Only update result image if NO RGB is loaded
+            if (rgbImagePath === "") {
+                resultImage.updateImage(resultPath)
+            }
             param1Text.text = param1.toFixed(4)
             param2Text.text = param2.toFixed(4)
         }

@@ -9,18 +9,28 @@ Item {
     
     function updateImage(path) {
         console.log("updateImage called with:", path)
+        
+        // If RGB is displayed, ignore analysis results
+        if (displayPath !== "") {
+            console.log("RGB is active - ignoring analysis result")
+            return
+        }
+        
         resultPath = path
         loadCurrentImage()
     }
     
     function loadCurrentImage() {
-        var pathToLoad = displayPath !== "" ? displayPath : resultPath
+        // Priority: displayPath (RGB) over resultPath (analysis)
+        var pathToLoad = displayPath !== "" ? displayPath : (resultPath !== "" ? resultPath : "")
         
         if (pathToLoad === "") {
             console.log("No image to load")
             resultImage.source = ""
             return
         }
+        
+        console.log("Loading from:", displayPath !== "" ? "RGB" : "Result")
         
         // Normalize path separators
         var normalizedPath = pathToLoad.replace(/\\/g, '/')
@@ -104,7 +114,7 @@ Item {
             text: {
                 if (root.displayPath === "" && root.resultPath === "") {
                     return "No image loaded"
-                } else if (resultImage.status === Image.Error) {
+                } else if (resultImage.status === Image.Error && resultImage.source !== "") {
                     return "Failed to load image\nCheck console for details"
                 }
                 return ""
