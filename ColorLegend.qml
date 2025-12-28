@@ -20,7 +20,7 @@ Rectangle {
             updateStatistics()
         }
     }
-
+    
     Component.onCompleted: {
         if (imagePath !== "" && processor !== null) {
             updateStatistics()

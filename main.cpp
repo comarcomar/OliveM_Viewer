@@ -2,20 +2,14 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
-#include <QDebug>
 #include "geotiffprocessor.h"
-#include <gdal_priv.h>
 
 int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
     
-    // Initialize GDAL
-    GDALAllRegister();
-    qDebug() << "GDAL initialized, version:" << GDALVersionInfo("VERSION_NUM");
-    
     // Set application information
-    app.setApplicationName("OM Tree Crown Segmentation Tool");
+    app.setApplicationName("Olive GeoTIFF Viewer");
     app.setOrganizationName("OliveAnalysis");
     app.setApplicationVersion("1.0.0");
     
@@ -34,21 +28,14 @@ int main(int argc, char *argv[])
     const QUrl url(QStringLiteral("qrc:/main.qml"));
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreated,
                      &app, [url](QObject *obj, const QUrl &objUrl) {
-        if (!obj && url == objUrl) {
-            qCritical() << "Failed to load QML file:" << url;
+        if (!obj && url == objUrl)
             QCoreApplication::exit(-1);
-        }
     }, Qt::QueuedConnection);
     
     engine.load(url);
     
-    if (engine.rootObjects().isEmpty()) {
-        qCritical() << "No root objects loaded!";
+    if (engine.rootObjects().isEmpty())
         return -1;
-    }
-    
-    qDebug() << "Application started successfully";
     
     return app.exec();
 }
-
