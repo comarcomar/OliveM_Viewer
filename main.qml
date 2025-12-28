@@ -40,11 +40,11 @@ ApplicationWindow {
         }
     }
     
-    // Color maps definition (removed Cool and Plasma)
+    // Color maps definition (verified correct order)
     property var colorMaps: [
         { name: "Jet", colors: ["#000080", "#0000FF", "#00FFFF", "#00FF00", "#FFFF00", "#FF0000", "#800000"] },
         { name: "Hot", colors: ["#000000", "#FF0000", "#FFFF00", "#FFFFFF"] },
-        { name: "Gray", colors: ["#000000", "#FFFFFF"] },
+        { name: "Grayscale", colors: ["#000000", "#FFFFFF"] },
         { name: "Viridis", colors: ["#440154", "#31688e", "#35b779", "#fde724"] }
     ]
     
@@ -190,6 +190,29 @@ ApplicationWindow {
                     Layout.fillWidth: true
                 }
                 
+                Button {
+                    text: "Run Analysis"
+                    implicitHeight: 40
+                    enabled: processor.hasValidImages && rgbImagePath === ""
+                    visible: rgbImagePath === ""
+                    onClicked: processor.runAnalysis()
+                    
+                    background: Rectangle {
+                        color: parent.enabled ? (parent.pressed ? "#006600" : 
+                               (parent.hovered ? "#008800" : "#00aa00")) : "#404040"
+                        radius: 4
+                    }
+                    
+                    contentItem: Text {
+                        text: parent.text
+                        color: "#ffffff"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        font.pixelSize: 13
+                        font.bold: true
+                    }
+                }
+                
                 Item { Layout.fillWidth: true }
             }
         }
@@ -218,6 +241,16 @@ ApplicationWindow {
                         Layout.fillHeight: true
                         panelTitle: "Ortofoto DSM"
                         colorMaps: mainWindow.colorMaps
+                        processor: processor
+                        themeColors: ({
+                            panelColor: mainWindow.panelColor,
+                            borderColor: mainWindow.borderColor,
+                            textColor: mainWindow.textColor,
+                            textSecondaryColor: mainWindow.textSecondaryColor,
+                            buttonColor: mainWindow.buttonColor,
+                            buttonHoverColor: mainWindow.buttonHoverColor,
+                            buttonPressedColor: mainWindow.buttonPressedColor
+                        })
                         onImageChanged: {
                             processor.setImage1(imagePath)
                             updateAnalysis()
@@ -237,6 +270,16 @@ ApplicationWindow {
                         Layout.fillHeight: true
                         panelTitle: "Ortofoto NDVI"
                         colorMaps: mainWindow.colorMaps
+                        processor: processor
+                        themeColors: ({
+                            panelColor: mainWindow.panelColor,
+                            borderColor: mainWindow.borderColor,
+                            textColor: mainWindow.textColor,
+                            textSecondaryColor: mainWindow.textSecondaryColor,
+                            buttonColor: mainWindow.buttonColor,
+                            buttonHoverColor: mainWindow.buttonHoverColor,
+                            buttonPressedColor: mainWindow.buttonPressedColor
+                        })
                         onImageChanged: {
                             processor.setImage2(imagePath)
                             updateAnalysis()
@@ -281,28 +324,6 @@ ApplicationWindow {
                             anchors.fill: parent
                             anchors.margins: 5
                             displayPath: rgbImagePath !== "" ? rgbImagePath : ""
-                        }
-                    }
-                    
-                    Button {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: "Run Analysis"
-                        enabled: processor.hasValidImages && rgbImagePath === ""
-                        visible: rgbImagePath === ""
-                        onClicked: processor.runAnalysis()
-                        
-                        background: Rectangle {
-                            color: parent.enabled ? (parent.pressed ? mainWindow.buttonPressedColor : 
-                                   (parent.hovered ? mainWindow.buttonHoverColor : mainWindow.buttonColor)) : "#404040"
-                            radius: 4
-                        }
-                        
-                        contentItem: Text {
-                            text: parent.text
-                            color: "#ffffff"
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                            font.pixelSize: 14
                         }
                     }
                 }
@@ -462,6 +483,8 @@ ApplicationWindow {
                     Label {
                         text: "Area Threshold: " + areaSlider.value
                         font.pixelSize: 11
+                        enabled: denoiseCheck.checked
+                        opacity: denoiseCheck.checked ? 1.0 : 0.5
                     }
                     
                     Slider {
@@ -471,6 +494,8 @@ ApplicationWindow {
                         value: mainWindow.areaThreshold
                         stepSize: 1
                         Layout.fillWidth: true
+                        enabled: denoiseCheck.checked
+                        opacity: denoiseCheck.checked ? 1.0 : 0.5
                     }
                 }
             }
@@ -509,7 +534,7 @@ ApplicationWindow {
         id: rgbDialog
         title: "Select RGB Orthophoto"
         fileMode: FileDialog.OpenFile
-        nameFilters: ["Image files (*.tif *.tiff *.jpg *.png)", "All files (*)"]
+        nameFilters: ["Image files (*.tif *.tiff *.jpg *.jpeg *.png)", "All files (*)"]
         onAccepted: {
             var path = selectedFile.toString()
             if (path.startsWith("file:///")) {
@@ -517,7 +542,12 @@ ApplicationWindow {
             } else if (path.startsWith("file://")) {
                 path = path.substring(7)
             }
+            
+            console.log("RGB file selected:", path)
             rgbImagePath = path
+            
+            // Force update of result image
+            resultImage.displayPath = ""
             resultImage.displayPath = path
         }
     }
@@ -529,11 +559,28 @@ ApplicationWindow {
     }
     
     function resetSystem() {
-        image1Panel.imagePath = ""
-        image2Panel.imagePath = ""
-        rgbImagePath = ""
-        param1Text.text = "---"
-        param2Text.text = "---"
-        resultImage.displayPath = ""
+        console.log("=== RESET SYSTEM START ===")
+        
+        // Turn off 3D first
+        image1Panel.show3D = false
+        image2Panel.show3D = false
+        
+        // Wait a bit for 3D to shut down
+        Qt.callLater(function() {
+            // Clear paths
+            image1Panel.imagePath = ""
+            image2Panel.imagePath = ""
+            rgbImagePath = ""
+            resultImage.displayPath = ""
+            
+            // Reset UI
+            param1Text.text = "---"
+            param2Text.text = "---"
+            
+            // Clear processor
+            processor.clearCache()
+            
+            console.log("=== RESET SYSTEM COMPLETE ===")
+        })
     }
 }
