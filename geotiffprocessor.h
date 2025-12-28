@@ -6,6 +6,7 @@
 #include <QImage>
 #include <QQuickImageProvider>
 #include <QThread>
+#include <QVariantMap>
 
 // Forward declaration for GDAL
 class GDALDataset;
@@ -25,6 +26,9 @@ public slots:
     void setImage1(const QString &path);
     void setImage2(const QString &path);
     void runAnalysis();
+    QVariantMap getImageStatistics(const QString &imagePath);
+    QVariantList getHeightData(const QString &imagePath, int maxWidth, int maxHeight);
+    void clearCache();
 
 signals:
     void imagesChanged();

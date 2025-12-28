@@ -354,16 +354,138 @@ QVector<QColor> GeoTiffImageProvider::getColorMapColors(int index)
                     QColor("#00FF00"), QColor("#FFFF00"), QColor("#FF0000"), QColor("#800000")};
         case 1: // Hot
             return {QColor("#000000"), QColor("#FF0000"), QColor("#FFFF00"), QColor("#FFFFFF")};
-        case 2: // Cool
-            return {QColor("#00FFFF"), QColor("#FF00FF")};
-        case 3: // Gray
+        case 2: // Grayscale
             return {QColor("#000000"), QColor("#FFFFFF")};
-        case 4: // Viridis
+        case 3: // Viridis
             return {QColor("#440154"), QColor("#31688e"), QColor("#35b779"), QColor("#fde724")};
-        case 5: // Plasma
-            return {QColor("#0d0887"), QColor("#7e03a8"), QColor("#cc4778"), 
-                    QColor("#f89540"), QColor("#f0f921")};
         default:
             return {QColor("#000000"), QColor("#FFFFFF")};
     }
+}
+
+QVariantMap GeoTiffProcessor::getImageStatistics(const QString &imagePath)
+{
+    QVariantMap stats;
+    
+    if (imagePath.isEmpty()) {
+        return stats;
+    }
+    
+    GDALDataset *dataset = (GDALDataset*)GDALOpen(imagePath.toUtf8().constData(), GA_ReadOnly);
+    if (dataset == nullptr) {
+        qWarning() << "Failed to open GeoTIFF for statistics:" << imagePath;
+        return stats;
+    }
+    
+    GDALRasterBand *band = dataset->GetRasterBand(1);
+    if (band == nullptr) {
+        qWarning() << "No raster band found for statistics";
+        GDALClose(dataset);
+        return stats;
+    }
+    
+    double minVal, maxVal, meanVal, stdDev;
+    CPLErr err = band->ComputeStatistics(false, &minVal, &maxVal, &meanVal, &stdDev, nullptr, nullptr);
+    
+    if (err == CE_None) {
+        stats["min"] = minVal;
+        stats["max"] = maxVal;
+        stats["mean"] = meanVal;
+        stats["stdDev"] = stdDev;
+        stats["valid"] = true;
+        
+        qDebug() << "Image statistics:" << imagePath;
+        qDebug() << "  Min:" << minVal << "Max:" << maxVal << "Mean:" << meanVal;
+    } else {
+        qWarning() << "Failed to compute statistics";
+        stats["valid"] = false;
+    }
+    
+    GDALClose(dataset);
+    return stats;
+}
+
+QVariantList GeoTiffProcessor::getHeightData(const QString &imagePath, int maxWidth, int maxHeight)
+{
+    QVariantList result;
+    
+    if (imagePath.isEmpty()) {
+        return result;
+    }
+    
+    GDALDataset *dataset = (GDALDataset*)GDALOpen(imagePath.toUtf8().constData(), GA_ReadOnly);
+    if (dataset == nullptr) {
+        qWarning() << "Failed to open GeoTIFF for height data:" << imagePath;
+        return result;
+    }
+    
+    GDALRasterBand *band = dataset->GetRasterBand(1);
+    if (band == nullptr) {
+        qWarning() << "No raster band found";
+        GDALClose(dataset);
+        return result;
+    }
+    
+    int width = dataset->GetRasterXSize();
+    int height = dataset->GetRasterYSize();
+    
+    // Downsample to reasonable size
+    int targetWidth = std::min(width, maxWidth);
+    int targetHeight = std::min(height, maxHeight);
+    
+    int stepX = std::max(1, width / targetWidth);
+    int stepY = std::max(1, height / targetHeight);
+    
+    qDebug() << "Reading height data from" << width << "x" << height 
+             << "downsampled to" << (width/stepX) << "x" << (height/stepY);
+    
+    // Get statistics for normalization
+    double minVal, maxVal, meanVal, stdDev;
+    band->ComputeStatistics(false, &minVal, &maxVal, &meanVal, &stdDev, nullptr, nullptr);
+    
+    if (maxVal <= minVal) {
+        maxVal = minVal + 1.0; // Avoid division by zero
+    }
+    
+    // Read data
+    for (int y = 0; y < height; y += stepY) {
+        for (int x = 0; x < width; x += stepX) {
+            float value;
+            CPLErr err = band->RasterIO(GF_Read, x, y, 1, 1, &value, 1, 1, GDT_Float32, 0, 0);
+            
+            if (err == CE_None && !std::isnan(value) && !std::isinf(value)) {
+                // Normalize to 0-1 range
+                double normalized = (value - minVal) / (maxVal - minVal);
+                normalized = std::max(0.0, std::min(1.0, normalized));
+                
+                QVariantMap point;
+                point["x"] = x / stepX;
+                point["y"] = y / stepY;
+                point["height"] = normalized;
+                point["rawValue"] = value;
+                
+                result.append(point);
+            }
+        }
+    }
+    
+    GDALClose(dataset);
+    
+    qDebug() << "Generated" << result.size() << "height data points";
+    return result;
+}
+
+void GeoTiffProcessor::clearCache()
+{
+    qDebug() << "Clearing processor cache...";
+    
+    // Just clear the paths, don't destroy GDAL
+    m_image1Path.clear();
+    m_image2Path.clear();
+    m_hasImage1 = false;
+    m_hasImage2 = false;
+    
+    emit imagesChanged();
+    
+    qDebug() << "Cache cleared";
 }
