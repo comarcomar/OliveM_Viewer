@@ -30,12 +30,12 @@ find_package(Qt6 REQUIRED COMPONENTS
 # GDAL configuration for Windows
 if(WIN32)
     # Set GDAL paths for OSGeo4W64
-    if(NOT DEFINED GDAL_DIR AND EXISTS "C:/Sviluppo/gdal/apps/gdal-dev")
-        set(GDAL_DIR "C:/Sviluppo/gdal/apps/gdal-dev")
+    if(NOT DEFINED GDAL_DIR AND EXISTS "C:/OSGeo4W64")
+        set(GDAL_DIR "C:/OSGeo4W64")
         set(GDAL_INCLUDE_DIR "${GDAL_DIR}/include")
         set(GDAL_LIBRARY "${GDAL_DIR}/lib/gdal_i.lib")
         
-        message(STATUS "Using GDAL")
+        message(STATUS "Using OSGeo4W64 GDAL")
         message(STATUS "GDAL Include: ${GDAL_INCLUDE_DIR}")
         message(STATUS "GDAL Library: ${GDAL_LIBRARY}")
     endif()
@@ -61,6 +61,7 @@ if(WIN32)
     add_executable(${PROJECT_NAME} WIN32
         ${PROJECT_SOURCES}
         ${PROJECT_RESOURCES}
+        app.rc
     )
 else()
     add_executable(${PROJECT_NAME}

@@ -219,6 +219,77 @@ QImage GeoTiffImageProvider::requestImage(const QString &id, QSize *size, const 
     qDebug() << "Raster size:" << dataset->GetRasterXSize() << "x" << dataset->GetRasterYSize();
     qDebug() << "Number of bands:" << dataset->GetRasterCount();
 
+    int numBands = dataset->GetRasterCount();
+    
+    // Check if this is RGB (colormap=-1 means RGB passthrough)
+    bool isRGB = (colorMapIndex == -1 && numBands >= 3);
+    
+    if (isRGB) {
+        qDebug() << "Processing as RGB image (3 bands)";
+        
+        // Get dimensions from first band
+        GDALRasterBand *band1 = dataset->GetRasterBand(1);
+        int width = band1->GetXSize();
+        int height = band1->GetYSize();
+        
+        // Downsample for memory
+        int maxDim = 2048;
+        double scale = 1.0;
+        if (width > maxDim || height > maxDim) {
+            scale = std::min((double)maxDim / width, (double)maxDim / height);
+        }
+        int outWidth = (int)(width * scale);
+        int outHeight = (int)(height * scale);
+        
+        qDebug() << "Downsampling from" << width << "x" << height << "to" << outWidth << "x" << outHeight;
+        
+        // Read RGB bands
+        std::vector<float> dataR(outWidth * outHeight);
+        std::vector<float> dataG(outWidth * outHeight);
+        std::vector<float> dataB(outWidth * outHeight);
+        
+        GDALRasterBand *bandR = dataset->GetRasterBand(1);
+        GDALRasterBand *bandG = dataset->GetRasterBand(2);
+        GDALRasterBand *bandB = dataset->GetRasterBand(3);
+        
+        bandR->RasterIO(GF_Read, 0, 0, width, height, dataR.data(), outWidth, outHeight, GDT_Float32, 0, 0);
+        bandG->RasterIO(GF_Read, 0, 0, width, height, dataG.data(), outWidth, outHeight, GDT_Float32, 0, 0);
+        bandB->RasterIO(GF_Read, 0, 0, width, height, dataB.data(), outWidth, outHeight, GDT_Float32, 0, 0);
+        
+        // Find min/max for normalization
+        float minR = *std::min_element(dataR.begin(), dataR.end());
+        float maxR = *std::max_element(dataR.begin(), dataR.end());
+        float minG = *std::min_element(dataG.begin(), dataG.end());
+        float maxG = *std::max_element(dataG.begin(), dataG.end());
+        float minB = *std::min_element(dataB.begin(), dataB.end());
+        float maxB = *std::max_element(dataB.begin(), dataB.end());
+        
+        qDebug() << "RGB ranges - R:" << minR << "-" << maxR << "G:" << minG << "-" << maxG << "B:" << minB << "-" << maxB;
+        
+        // Create QImage
+        QImage image(outWidth, outHeight, QImage::Format_RGB888);
+        
+        for (int y = 0; y < outHeight; y++) {
+            for (int x = 0; x < outWidth; x++) {
+                int idx = y * outWidth + x;
+                int r = (int)((dataR[idx] - minR) / (maxR - minR) * 255);
+                int g = (int)((dataG[idx] - minG) / (maxG - minG) * 255);
+                int b = (int)((dataB[idx] - minB) / (maxB - minB) * 255);
+                r = std::max(0, std::min(255, r));
+                g = std::max(0, std::min(255, g));
+                b = std::max(0, std::min(255, b));
+                image.setPixel(x, y, qRgb(r, g, b));
+            }
+        }
+        
+        GDALClose(dataset);
+        
+        if (size) *size = image.size();
+        qDebug() << "RGB image generation complete:" << image.size();
+        return image;
+    }
+
+    // Single band processing (original code)
     // Get the first band
     GDALRasterBand *band = dataset->GetRasterBand(1);
     if (band == nullptr) {

@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
-import Qt.labs.settings
+import QtCore
 import GeoTiffProcessor
 
 ApplicationWindow {
@@ -40,7 +40,7 @@ ApplicationWindow {
     // Processor backend
     GeoTiffProcessor {
         id: processor
-        onAnalysisCompleted: {
+        onAnalysisCompleted: (resultPath, param1, param2) => {
             // Only update result image if NO RGB is loaded
             if (rgbImagePath === "") {
                 resultImage.updateImage(resultPath)
@@ -48,7 +48,7 @@ ApplicationWindow {
             param1Text.text = param1.toFixed(4)
             param2Text.text = param2.toFixed(4)
         }
-        onErrorOccurred: {
+        onErrorOccurred: (errorMessage) => {
             errorDialog.text = errorMessage
             errorDialog.open()
         }
@@ -242,7 +242,7 @@ ApplicationWindow {
                             buttonHoverColor: mainWindow.buttonHoverColor,
                             buttonPressedColor: mainWindow.buttonPressedColor
                         })
-                        onImageChanged: {
+                        onImageChanged: (imagePath) => {
                             processor.setImage1(imagePath)
                             updateAnalysis()
                         }
@@ -271,7 +271,7 @@ ApplicationWindow {
                             buttonHoverColor: mainWindow.buttonHoverColor,
                             buttonPressedColor: mainWindow.buttonPressedColor
                         })
-                        onImageChanged: {
+                        onImageChanged: (imagePath) => {
                             processor.setImage2(imagePath)
                             updateAnalysis()
                         }

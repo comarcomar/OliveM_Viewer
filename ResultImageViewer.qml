@@ -35,20 +35,21 @@ Item {
         var normalizedPath = pathToLoad.replace(/\\/g, '/')
         console.log("Normalized path:", normalizedPath)
         
-        // For RGB (displayPath), use image provider to control memory
-        // For analysis result, try direct load first (smaller files)
-        if (displayPath !== "") {
-            // RGB - use image provider with grayscale colormap (index 2)
+        // For RGB TIFF, we need special handling due to Qt 256MB limit
+        // Use image provider which handles downsampling
+        if (displayPath !== "" && (normalizedPath.endsWith('.tif') || normalizedPath.endsWith('.tiff'))) {
+            // Large RGB TIFF - use image provider
+            // For RGB images, use colormap -1 to indicate RGB passthrough
             var cleanPath = normalizedPath
             if (cleanPath.startsWith("file:///")) cleanPath = cleanPath.substring(8)
             else if (cleanPath.startsWith("file://")) cleanPath = cleanPath.substring(7)
             var encodedPath = encodeURIComponent(cleanPath)
-            var imageUrl = "image://geotiff/" + encodedPath + "?colormap=2&t=" + Date.now()
-            console.log("Using image provider:", imageUrl)
+            var imageUrl = "image://geotiff/" + encodedPath + "?colormap=-1&t=" + Date.now()
+            console.log("Using image provider for RGB:", imageUrl)
             resultImage.source = ""
             resultImage.source = imageUrl
         } else {
-            // Analysis result - direct file URL
+            // Small files or non-TIFF - direct load
             var fileUrl = ""
             if (normalizedPath.startsWith("file://")) {
                 fileUrl = normalizedPath
