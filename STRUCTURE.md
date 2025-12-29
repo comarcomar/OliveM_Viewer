@@ -11,7 +11,7 @@ OliveGeoTiffViewer/
 └── External/                 # Librerie esterne
 ```
 
-## Struttura Dettagliata dei File
+## Struttura Dettagliata dei File 
 
 ```
 OliveGeoTiffViewer/
