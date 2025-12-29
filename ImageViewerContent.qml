@@ -58,6 +58,32 @@ Item {
                 width: Math.max(flickable.width, imageView.width * imageView.scale)
                 height: Math.max(flickable.height, imageView.height * imageView.scale)
                 
+                function reloadImage() {
+                    imageView.source = ""
+                    if (root.imagePath !== "") {
+                        var cleanPath = root.imagePath
+                        if (cleanPath.startsWith("file:///")) cleanPath = cleanPath.substring(8)
+                        else if (cleanPath.startsWith("file://")) cleanPath = cleanPath.substring(7)
+                        var encodedPath = encodeURIComponent(cleanPath)
+                        var newSource = "image://geotiff/" + encodedPath + "?colormap=" + root.colorMapIndex + "&t=" + Date.now()
+                        console.log("Loading image source:", newSource)
+                        imageView.source = newSource
+                    }
+                }
+                
+                function updateImageSize() {
+                    if (imageView.sourceSize.width > 0 && imageView.sourceSize.height > 0) {
+                        var aspectRatio = imageView.sourceSize.width / imageView.sourceSize.height
+                        if (flickable.width / flickable.height > aspectRatio) {
+                            imageView.width = flickable.height * aspectRatio
+                            imageView.height = flickable.height
+                        } else {
+                            imageView.width = flickable.width
+                            imageView.height = flickable.width / aspectRatio
+                        }
+                    }
+                }
+                
                 Image {
                     id: imageView
                     anchors.centerIn: parent
@@ -69,39 +95,29 @@ Item {
                     
                     Component.onCompleted: {
                         console.log("ImageViewerContent created")
+                        if (root.imagePath !== "") {
+                            imageContainer.reloadImage()
+                        }
                     }
                     
                     Connections {
                         target: root
                         function onImagePathChanged() {
                             console.log("ImageViewerContent: imagePath changed to:", root.imagePath)
-                            reloadImage()
+                            imageContainer.reloadImage()
                         }
                         function onColorMapIndexChanged() {
                             console.log("ImageViewerContent: colorMapIndex changed to:", root.colorMapIndex)
                             if (root.imagePath !== "") {
-                                reloadImage()
+                                imageContainer.reloadImage()
                             }
-                        }
-                    }
-                    
-                    function reloadImage() {
-                        imageView.source = ""
-                        if (root.imagePath !== "") {
-                            var cleanPath = root.imagePath
-                            if (cleanPath.startsWith("file:///")) cleanPath = cleanPath.substring(8)
-                            else if (cleanPath.startsWith("file://")) cleanPath = cleanPath.substring(7)
-                            var encodedPath = encodeURIComponent(cleanPath)
-                            var newSource = "image://geotiff/" + encodedPath + "?colormap=" + root.colorMapIndex + "&t=" + Date.now()
-                            console.log("Loading image source:", newSource)
-                            imageView.source = newSource
                         }
                     }
                     
                     onStatusChanged: {
                         if (status === Image.Ready) {
                             hideInstructionsTimer.restart()
-                            updateImageSize()
+                            imageContainer.updateImageSize()
                         } else if (status === Image.Error) {
                             console.error("Failed to load image:", source)
                         }
@@ -110,21 +126,8 @@ Item {
                     // Update size when flickable size changes
                     Connections {
                         target: flickable
-                        function onWidthChanged() { if (imageView.status === Image.Ready) updateImageSize() }
-                        function onHeightChanged() { if (imageView.status === Image.Ready) updateImageSize() }
-                    }
-                    
-                    function updateImageSize() {
-                        if (sourceSize.width > 0 && sourceSize.height > 0) {
-                            var aspectRatio = sourceSize.width / sourceSize.height
-                            if (flickable.width / flickable.height > aspectRatio) {
-                                imageView.width = flickable.height * aspectRatio
-                                imageView.height = flickable.height
-                            } else {
-                                imageView.width = flickable.width
-                                imageView.height = flickable.width / aspectRatio
-                            }
-                        }
+                        function onWidthChanged() { if (imageView.status === Image.Ready) imageContainer.updateImageSize() }
+                        function onHeightChanged() { if (imageView.status === Image.Ready) imageContainer.updateImageSize() }
                     }
                     
                     Behavior on scale {

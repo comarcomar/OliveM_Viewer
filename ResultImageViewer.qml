@@ -9,15 +9,14 @@ Item {
     
     function updateImage(path) {
         console.log("updateImage called with:", path)
-        
-        // If RGB is displayed, ignore analysis results
-        if (displayPath !== "") {
-            console.log("RGB is active - ignoring analysis result")
-            return
-        }
-        
         resultPath = path
-        loadCurrentImage()
+        
+        // Only load if NO RGB is active
+        if (displayPath === "") {
+            loadCurrentImage()
+        } else {
+            console.log("RGB is active - keeping RGB displayed")
+        }
     }
     
     function loadCurrentImage() {
@@ -36,28 +35,35 @@ Item {
         var normalizedPath = pathToLoad.replace(/\\/g, '/')
         console.log("Normalized path:", normalizedPath)
         
-        // Build proper file URL based on path type
-        var fileUrl = ""
-        
-        if (normalizedPath.startsWith("file://")) {
-            // Already a URL
-            fileUrl = normalizedPath
-        } else if (normalizedPath.startsWith("/")) {
-            // Unix/Linux absolute path
-            fileUrl = "file://" + normalizedPath
-        } else if (normalizedPath.match(/^[A-Za-z]:\//)) {
-            // Windows absolute path (C:/, D:/, etc.)
-            fileUrl = "file:///" + normalizedPath
+        // For RGB (displayPath), use image provider to control memory
+        // For analysis result, try direct load first (smaller files)
+        if (displayPath !== "") {
+            // RGB - use image provider with grayscale colormap (index 2)
+            var cleanPath = normalizedPath
+            if (cleanPath.startsWith("file:///")) cleanPath = cleanPath.substring(8)
+            else if (cleanPath.startsWith("file://")) cleanPath = cleanPath.substring(7)
+            var encodedPath = encodeURIComponent(cleanPath)
+            var imageUrl = "image://geotiff/" + encodedPath + "?colormap=2&t=" + Date.now()
+            console.log("Using image provider:", imageUrl)
+            resultImage.source = ""
+            resultImage.source = imageUrl
         } else {
-            // Fallback - assume Windows-style path
-            fileUrl = "file:///" + normalizedPath
+            // Analysis result - direct file URL
+            var fileUrl = ""
+            if (normalizedPath.startsWith("file://")) {
+                fileUrl = normalizedPath
+            } else if (normalizedPath.startsWith("/")) {
+                fileUrl = "file://" + normalizedPath
+            } else if (normalizedPath.match(/^[A-Za-z]:\//)) {
+                fileUrl = "file:///" + normalizedPath
+            } else {
+                fileUrl = "file:///" + normalizedPath
+            }
+            
+            console.log("Final URL:", fileUrl)
+            resultImage.source = ""
+            resultImage.source = fileUrl
         }
-        
-        console.log("Final URL:", fileUrl)
-        
-        // Force reload by clearing first
-        resultImage.source = ""
-        resultImage.source = fileUrl
     }
     
     onDisplayPathChanged: {
@@ -86,6 +92,8 @@ Item {
             fillMode: Image.PreserveAspectFit
             cache: false
             asynchronous: true
+            sourceSize.width: 2048  // Limit size to prevent memory overflow
+            sourceSize.height: 2048
             
             onStatusChanged: {
                 console.log(">>> Image status:", 
