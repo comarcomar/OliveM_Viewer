@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(OliveGeoTiffViewer VERSION 1.0.0 LANGUAGES CXX)
+project(OliveM_Viewer VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -8,6 +8,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
+
+# OliveMatrixLibCore.dll path configuration
+# User can specify: -DOLIVEMATRIX_PATH=C:/path/to/OliveMatrixLibCore/Release/net6.0
+set(OLIVEMATRIX_PATH "" CACHE PATH "Path to OliveMatrixLibCore.dll directory (e.g., OliveMatrixLibCore/Release/net6.0)")
+
+if(OLIVEMATRIX_PATH AND EXISTS "${OLIVEMATRIX_PATH}")
+    message(STATUS "OliveMatrixLibCore path: ${OLIVEMATRIX_PATH}")
+else()
+    message(STATUS "OliveMatrixLibCore path not specified (use -DOLIVEMATRIX_PATH=...)")
+    message(STATUS "The DLL will be loaded from system PATH or executable directory")
+endif()
 
 # MSVC specific settings
 if(MSVC)
@@ -120,13 +131,25 @@ if(WIN32)
         endforeach()
     endif()
     
-    # Copy OliveMatrixLib.dll if it exists
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/OliveMatrixLib.dll")
+    # Copy OliveMatrixLibCore.dll and dependencies if path is specified
+    if(OLIVEMATRIX_PATH AND EXISTS "${OLIVEMATRIX_PATH}")
+        message(STATUS "Copying OliveMatrixLibCore from: ${OLIVEMATRIX_PATH}")
+        
+        # Copy the entire directory (includes DLL + dependencies + gdal folder)
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${CMAKE_CURRENT_SOURCE_DIR}/OliveMatrixLib.dll"
-                "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${OLIVEMATRIX_PATH}"
+                "$<TARGET_FILE_DIR:${PROJECT_NAME}>/OliveMatrixLibCore"
+            COMMENT "Copying OliveMatrixLibCore and dependencies..."
         )
+        
+        # Add to PATH at runtime (Visual Studio)
+        set_target_properties(${PROJECT_NAME} PROPERTIES
+            VS_DEBUGGER_ENVIRONMENT "PATH=$<TARGET_FILE_DIR:${PROJECT_NAME}>/OliveMatrixLibCore;$<TARGET_FILE_DIR:${PROJECT_NAME}>/OliveMatrixLibCore/gdal/x64;%PATH%"
+        )
+    else()
+        message(STATUS "OliveMatrixLibCore not copied - ensure DLL is in system PATH")
+        message(STATUS "To copy DLL automatically, set: -DOLIVEMATRIX_PATH=path/to/OliveMatrixLibCore/Release/net6.0")
     endif()
 endif()
 
