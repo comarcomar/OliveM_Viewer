@@ -294,34 +294,45 @@ ApplicationWindow {
                     anchors.margins: 10
                     spacing: 10
                     
-                    Label {
-                        text: rgbImagePath !== "" ? "RGB Orthophoto" : "Analysis Result"
-                        font.pixelSize: 18
-                        font.bold: true
-                        color: mainWindow.textColor
-                    }
-                    
-                    Button {
-                        text: "Run Analysis"
-                        Layout.preferredHeight: 35
-                        Layout.preferredWidth: 150
-                        enabled: processor.hasValidImages && rgbImagePath === ""
-                        visible: rgbImagePath === ""
-                        onClicked: processor.runAnalysis()
+                    // Header row with fixed height
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 80
                         
-                        background: Rectangle {
-                            color: parent.enabled ? (parent.pressed ? "#006600" : 
-                                   (parent.hovered ? "#008800" : "#00aa00")) : "#404040"
-                            radius: 4
-                        }
-                        
-                        contentItem: Text {
-                            text: parent.text
-                            color: "#ffffff"
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                            font.pixelSize: 13
-                            font.bold: true
+                        ColumnLayout {
+                            anchors.fill: parent
+                            spacing: 10
+                            
+                            Label {
+                                text: rgbImagePath !== "" ? "RGB Orthophoto" : "Analysis Result"
+                                font.pixelSize: 18
+                                font.bold: true
+                                color: mainWindow.textColor
+                            }
+                            
+                            Button {
+                                text: "Run Analysis"
+                                Layout.preferredHeight: 35
+                                Layout.preferredWidth: 150
+                                enabled: processor.hasValidImages && rgbImagePath === ""
+                                visible: rgbImagePath === ""
+                                onClicked: processor.runAnalysis()
+                                
+                                background: Rectangle {
+                                    color: parent.enabled ? (parent.pressed ? "#006600" : 
+                                           (parent.hovered ? "#008800" : "#00aa00")) : "#404040"
+                                    radius: 4
+                                }
+                                
+                                contentItem: Text {
+                                    text: parent.text
+                                    color: "#ffffff"
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                    font.pixelSize: 13
+                                    font.bold: true
+                                }
+                            }
                         }
                     }
                     

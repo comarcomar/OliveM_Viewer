@@ -10,14 +10,26 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 # OliveMatrixLibCore.dll path configuration
-# User can specify: -DOLIVEMATRIX_PATH=C:/path/to/OliveMatrixLibCore/Release/net6.0
+# Auto-detect if present in source directory
 set(OLIVEMATRIX_PATH "" CACHE PATH "Path to OliveMatrixLibCore.dll directory (e.g., OliveMatrixLibCore/Release/net6.0)")
+
+if(NOT OLIVEMATRIX_PATH OR NOT EXISTS "${OLIVEMATRIX_PATH}")
+    # Try to auto-detect in source directory
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/OliveMatrixLibCore/Release/net6.0")
+        set(OLIVEMATRIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/OliveMatrixLibCore/Release/net6.0")
+        message(STATUS "Auto-detected OliveMatrixLibCore (Release): ${OLIVEMATRIX_PATH}")
+    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/OliveMatrixLibCore/Debug/net6.0")
+        set(OLIVEMATRIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/OliveMatrixLibCore/Debug/net6.0")
+        message(STATUS "Auto-detected OliveMatrixLibCore (Debug): ${OLIVEMATRIX_PATH}")
+    else()
+        message(STATUS "OliveMatrixLibCore not found in source directory")
+        message(STATUS "Expected: ${CMAKE_CURRENT_SOURCE_DIR}/OliveMatrixLibCore/[Release|Debug]/net6.0")
+        message(STATUS "The DLL will be loaded from system PATH or executable directory")
+    endif()
+endif()
 
 if(OLIVEMATRIX_PATH AND EXISTS "${OLIVEMATRIX_PATH}")
     message(STATUS "OliveMatrixLibCore path: ${OLIVEMATRIX_PATH}")
-else()
-    message(STATUS "OliveMatrixLibCore path not specified (use -DOLIVEMATRIX_PATH=...)")
-    message(STATUS "The DLL will be loaded from system PATH or executable directory")
 endif()
 
 # MSVC specific settings
@@ -143,17 +155,84 @@ if(WIN32)
     if(OLIVEMATRIX_PATH AND EXISTS "${OLIVEMATRIX_PATH}")
         message(STATUS "Copying OliveMatrixLibCore from: ${OLIVEMATRIX_PATH}")
         
-        # Copy the entire directory (includes DLL + dependencies + gdal folder)
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${OLIVEMATRIX_PATH}"
-                "$<TARGET_FILE_DIR:${PROJECT_NAME}>/OliveMatrixLibCore"
-            COMMENT "Copying OliveMatrixLibCore and dependencies..."
+        # List of DLLs that MUST be excluded (version conflicts with system)
+        # These are native libraries that must match the compile-time versions
+        set(EXCLUDED_DLLS
+            "gdal"           # GDAL library
+            "geos"           # GEOS library  
+            "proj"           # PROJ library
+            "sqlite3"        # SQLite
+            "spatialite"     # SpatiaLite
+            "openjp2"        # OpenJPEG (opj_* functions)
+            "tiff"           # LibTIFF
+            "geotiff"        # GeoTIFF
+            "jpeg"           # JPEG
+            "png"            # PNG
+            "zlib"           # ZLib
+            "curl"           # cURL
+            "ssl"            # OpenSSL
+            "crypto"         # OpenSSL crypto
+            "expat"          # Expat XML
+            "xml2"           # libxml2
+            "iconv"          # iconv
+            "hdf5"           # HDF5
+            "netcdf"         # NetCDF
+            "kea"            # KEA
+            "webp"           # WebP
         )
+        
+        # Get all DLLs from OliveMatrixLibCore directory
+        file(GLOB OLIVEMATRIX_ALL_DLLS "${OLIVEMATRIX_PATH}/*.dll")
+        
+        # Filter out excluded DLLs
+        set(OLIVEMATRIX_DLLS "")
+        foreach(DLL_FILE ${OLIVEMATRIX_ALL_DLLS})
+            get_filename_component(DLL_NAME "${DLL_FILE}" NAME_WE)
+            
+            set(IS_EXCLUDED FALSE)
+            foreach(EXCLUDED ${EXCLUDED_DLLS})
+                string(TOLOWER "${DLL_NAME}" DLL_NAME_LOWER)
+                string(TOLOWER "${EXCLUDED}" EXCLUDED_LOWER)
+                if("${DLL_NAME_LOWER}" MATCHES "^${EXCLUDED_LOWER}")
+                    set(IS_EXCLUDED TRUE)
+                    message(STATUS "  Excluding (version conflict): ${DLL_NAME}.dll")
+                    break()
+                endif()
+            endforeach()
+            
+            if(NOT IS_EXCLUDED)
+                list(APPEND OLIVEMATRIX_DLLS "${DLL_FILE}")
+            endif()
+        endforeach()
+        
+        # Copy only .NET and non-conflicting DLLs
+        foreach(DLL_FILE ${OLIVEMATRIX_DLLS})
+            get_filename_component(DLL_NAME "${DLL_FILE}" NAME)
+            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${DLL_FILE}"
+                    "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+                COMMENT "  Copying: ${DLL_NAME}"
+            )
+        endforeach()
+        
+        # Copy JSON config files
+        file(GLOB OLIVEMATRIX_JSON "${OLIVEMATRIX_PATH}/*.json")
+        foreach(JSON_FILE ${OLIVEMATRIX_JSON})
+            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${JSON_FILE}"
+                    "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+            )
+        endforeach()
+        
+        # NOTE: All native libraries (GDAL, OpenJPEG, etc.) come from system GDAL
+        # This prevents version conflicts between compile-time and runtime
+        message(STATUS "Using system native libraries (GDAL, OpenJPEG, etc.) to avoid conflicts")
         
         # Add to PATH at runtime (Visual Studio)
         set_target_properties(${PROJECT_NAME} PROPERTIES
-            VS_DEBUGGER_ENVIRONMENT "PATH=$<TARGET_FILE_DIR:${PROJECT_NAME}>/OliveMatrixLibCore;$<TARGET_FILE_DIR:${PROJECT_NAME}>/OliveMatrixLibCore/gdal/x64;%PATH%"
+            VS_DEBUGGER_ENVIRONMENT "PATH=$<TARGET_FILE_DIR:${PROJECT_NAME}>;%PATH%"
         )
     else()
         message(STATUS "OliveMatrixLibCore not copied - ensure DLL is in system PATH")

@@ -110,6 +110,22 @@ Item {
                 active: true
             }
             
+            // Mouse wheel zoom
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.NoButton
+                
+                onWheel: (wheel) => {
+                    if (resultImage.status === Image.Ready) {
+                        var delta = wheel.angleDelta.y
+                        var factor = delta > 0 ? 1.1 : 0.9
+                        var newScale = resultImage.scale * factor
+                        newScale = Math.max(0.1, Math.min(5.0, newScale))
+                        resultImage.scale = newScale
+                    }
+                }
+            }
+            
             Image {
                 id: resultImage
                 width: flickable.width
@@ -117,7 +133,7 @@ Item {
                 fillMode: Image.PreserveAspectFit
                 cache: false
                 asynchronous: true
-                sourceSize.width: 2048  // Limit size to prevent memory overflow
+                sourceSize.width: 2048
                 sourceSize.height: 2048
                 scale: 1.0
                 transformOrigin: Item.Center
