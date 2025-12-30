@@ -29,14 +29,13 @@ if(MSVC)
     )
 endif()
 
-# QT configuration for Windows
+# QT6 configuration for Windows
 if(WIN32)
-    # Set QT 
+    # Set GDAL paths
     if(NOT DEFINED QT6_DIR AND EXISTS "C:/Qt/6.10.1/msvc2022_64/lib/cmake/Qt6")
         set(QT6_DIR "C:/Qt/6.10.1/msvc2022_64/lib/cmake/Qt6")
     endif()
 endif()
-
 
 # Find Qt packages
 find_package(Qt6 REQUIRED COMPONENTS
@@ -49,13 +48,13 @@ find_package(Qt6 REQUIRED COMPONENTS
 
 # GDAL configuration for Windows
 if(WIN32)
-    # Set GDAL paths for OSGeo4W64
+    # Set GDAL paths
     if(NOT DEFINED GDAL_DIR AND EXISTS "C:/Sviluppo/gdal/apps/gdal-dev")
         set(GDAL_DIR "C:/Sviluppo/gdal/apps/gdal-dev")
         set(GDAL_INCLUDE_DIR "${GDAL_DIR}/include")
         set(GDAL_LIBRARY "${GDAL_DIR}/lib/gdal_i.lib")
         
-        message(STATUS "Using OSGeo4W64 GDAL")
+        message(STATUS "Using GDAL")
         message(STATUS "GDAL Include: ${GDAL_INCLUDE_DIR}")
         message(STATUS "GDAL Library: ${GDAL_LIBRARY}")
     endif()
