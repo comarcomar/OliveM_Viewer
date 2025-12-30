@@ -25,28 +25,35 @@ public:
 public slots:
     void setImage1(const QString &path);
     void setImage2(const QString &path);
+    void setShapefileZip(const QString &path);
     void runAnalysis();
+    void setDenoiseFlag(bool enabled);
+    void setAreaThreshold(int threshold);
     QVariantMap getImageStatistics(const QString &imagePath);
     QVariantList getHeightData(const QString &imagePath, int maxWidth, int maxHeight);
     void clearCache();
 
 signals:
     void imagesChanged();
-    void analysisCompleted(const QString &resultPath, double param1, double param2);
+    void analysisCompleted(const QString &resultPath, double fCov, double meanNdvi);
     void errorOccurred(const QString &errorMessage);
 
 private:
     QString m_image1Path;
     QString m_image2Path;
+    QString m_shapefileZipPath;
     bool m_hasImage1;
     bool m_hasImage2;
+    bool m_denoiseFlag;
+    int m_areaThreshold;
 
     // Load GeoTIFF and validate
     bool loadGeoTiff(const QString &path);
     
     // Call external DLL function
-    bool callRunAnalysis(const QString &image1, const QString &image2, 
-                         QString &outputPath, double &param1, double &param2);
+    bool callRunAnalysis(const QString &dsmPath, const QString &ndviPath, 
+                         const QString &shapefileZip, QString &outputPath, 
+                         double &fCov, double &meanNdvi);
 };
 
 // Image provider for displaying GeoTIFF with color maps

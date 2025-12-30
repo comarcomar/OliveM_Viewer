@@ -69,10 +69,16 @@ Item {
     
     onDisplayPathChanged: {
         console.log("=== DisplayPath changed to:", displayPath)
-        if (displayPath !== "" || resultPath !== "") {
+        if (displayPath !== "") {
+            // RGB was loaded - display it
             loadCurrentImage()
         } else {
-            resultImage.source = ""
+            // RGB was cleared - show result if available, otherwise clear
+            if (resultPath !== "") {
+                loadCurrentImage()
+            } else {
+                resultImage.source = ""
+            }
         }
     }
     
@@ -87,34 +93,55 @@ Item {
         anchors.fill: parent
         color: "#1a1a1a"
         
-        Image {
-            id: resultImage
+        Flickable {
+            id: flickable
             anchors.fill: parent
-            fillMode: Image.PreserveAspectFit
-            cache: false
-            asynchronous: true
-            sourceSize.width: 2048  // Limit size to prevent memory overflow
-            sourceSize.height: 2048
+            contentWidth: resultImage.width * resultImage.scale
+            contentHeight: resultImage.height * resultImage.scale
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
             
-            onStatusChanged: {
-                console.log(">>> Image status:", 
-                    status === Image.Null ? "Null" :
-                    status === Image.Ready ? "Ready" :
-                    status === Image.Loading ? "Loading" :
-                    status === Image.Error ? "ERROR" : "Unknown")
-                
-                if (status === Image.Error) {
-                    console.error("!!! Failed to load:", source)
-                } else if (status === Image.Ready) {
-                    console.log("✓ Image loaded successfully")
-                    console.log("  Size:", sourceSize.width, "x", sourceSize.height)
-                }
+            ScrollBar.vertical: ScrollBar { 
+                policy: ScrollBar.AsNeeded 
+                active: true
+            }
+            ScrollBar.horizontal: ScrollBar { 
+                policy: ScrollBar.AsNeeded
+                active: true
             }
             
-            BusyIndicator {
-                anchors.centerIn: parent
-                running: resultImage.status === Image.Loading
-                visible: running
+            Image {
+                id: resultImage
+                width: flickable.width
+                height: flickable.height
+                fillMode: Image.PreserveAspectFit
+                cache: false
+                asynchronous: true
+                sourceSize.width: 2048  // Limit size to prevent memory overflow
+                sourceSize.height: 2048
+                scale: 1.0
+                transformOrigin: Item.Center
+                
+                onStatusChanged: {
+                    console.log(">>> Image status:", 
+                        status === Image.Null ? "Null" :
+                        status === Image.Ready ? "Ready" :
+                        status === Image.Loading ? "Loading" :
+                        status === Image.Error ? "ERROR" : "Unknown")
+                    
+                    if (status === Image.Error) {
+                        console.error("!!! Failed to load:", source)
+                    } else if (status === Image.Ready) {
+                        console.log("✓ Image loaded successfully")
+                        console.log("  Size:", sourceSize.width, "x", sourceSize.height)
+                    }
+                }
+                
+                BusyIndicator {
+                    anchors.centerIn: parent
+                    running: resultImage.status === Image.Loading
+                    visible: running
+                }
             }
         }
         

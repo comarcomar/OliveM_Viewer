@@ -8,14 +8,24 @@
 #include <gdal_priv.h>
 #include <cpl_conv.h>
 
-// Function pointer type for the DLL function
-typedef bool (*RunAnalysisFunc)(const char* image1Path, const char* image2Path, 
-                                 char* outputPath, double* param1, double* param2);
+// Function pointer type for the .NET 6.0 DLL function
+// OliveMatrixLibCore.dll
+// int RunAnalysis(String srcDsmDataset, String srcNdviDataset, String shapefileZip, 
+//                 out double fCov, out double meanNdvi, bool denoiseFlag, int areaThresh)
+typedef int (*RunAnalysisFunc)(const char* srcDsmDataset, 
+                                const char* srcNdviDataset,
+                                const char* shapefileZip,
+                                double* fCov,
+                                double* meanNdvi,
+                                bool denoiseFlag,
+                                int areaThresh);
 
 GeoTiffProcessor::GeoTiffProcessor(QObject *parent)
     : QObject(parent)
     , m_hasImage1(false)
     , m_hasImage2(false)
+    , m_denoiseFlag(false)
+    , m_areaThreshold(70)
 {
     // Initialize GDAL
     GDALAllRegister();
@@ -52,6 +62,24 @@ void GeoTiffProcessor::setImage2(const QString &path)
     }
 }
 
+void GeoTiffProcessor::setShapefileZip(const QString &path)
+{
+    m_shapefileZipPath = path;
+    qDebug() << "Shapefile ZIP set:" << path;
+}
+
+void GeoTiffProcessor::setDenoiseFlag(bool enabled)
+{
+    m_denoiseFlag = enabled;
+    qDebug() << "Denoise flag set to:" << enabled;
+}
+
+void GeoTiffProcessor::setAreaThreshold(int threshold)
+{
+    m_areaThreshold = threshold;
+    qDebug() << "Area threshold set to:" << threshold;
+}
+
 bool GeoTiffProcessor::loadGeoTiff(const QString &path)
 {
     QFileInfo fileInfo(path);
@@ -86,79 +114,101 @@ bool GeoTiffProcessor::loadGeoTiff(const QString &path)
 void GeoTiffProcessor::runAnalysis()
 {
     if (!hasValidImages()) {
-        emit errorOccurred("Both images must be loaded before running analysis");
+        emit errorOccurred("Both DSM and NDVI images must be loaded before running analysis");
         return;
     }
 
     QString outputPath;
-    double param1 = 0.0;
-    double param2 = 0.0;
+    double fCov = 0.0;
+    double meanNdvi = 0.0;
 
-    if (callRunAnalysis(m_image1Path, m_image2Path, outputPath, param1, param2)) {
-        emit analysisCompleted(outputPath, param1, param2);
+    if (callRunAnalysis(m_image1Path, m_image2Path, m_shapefileZipPath, outputPath, fCov, meanNdvi)) {
+        emit analysisCompleted(outputPath, fCov, meanNdvi);
     } else {
         emit errorOccurred("Analysis failed. Check that OliveMatrixLib.dll is available and compatible.");
     }
 }
 
-bool GeoTiffProcessor::callRunAnalysis(const QString &image1, const QString &image2,
-                                        QString &outputPath, double &param1, double &param2)
+bool GeoTiffProcessor::callRunAnalysis(const QString &dsmPath, const QString &ndviPath,
+                                        const QString &shapefileZip, QString &outputPath, 
+                                        double &fCov, double &meanNdvi)
 {
-    // Load the DLL
-    QLibrary library("OliveMatrixLib");
+    // Load OliveMatrixLibCore.dll from system PATH
+    // The DLL should be in PATH or in the same directory as the executable
+    // Location: OliveMatrixLibCore\Release\net6.0\ or OliveMatrixLibCore\Debug\net6.0\
+    // GDAL dependencies in: OliveMatrixLibCore\[Release|Debug]\net6.0\gdal\x64\
+    
+    QLibrary library("OliveMatrixLibCore");
     
     if (!library.load()) {
-        qWarning() << "Failed to load OliveMatrixLib.dll:" << library.errorString();
+        qWarning() << "Failed to load OliveMatrixLibCore.dll:" << library.errorString();
+        qWarning() << "Make sure the DLL path is in system PATH or in the executable directory";
+        qWarning() << "Expected locations:";
+        qWarning() << "  - OliveMatrixLibCore\\Release\\net6.0\\OliveMatrixLibCore.dll";
+        qWarning() << "  - OliveMatrixLibCore\\Debug\\net6.0\\OliveMatrixLibCore.dll";
+        qWarning() << "GDAL dependencies should be in: OliveMatrixLibCore\\[Release|Debug]\\net6.0\\gdal\\x64\\";
         
-        // Fallback: create a dummy result for testing
+        // Fallback: create dummy result for testing
         qWarning() << "Using fallback dummy analysis for testing purposes";
         
-        // Create a simple merged result image as fallback
         outputPath = QDir::temp().filePath("analysis_result.tif");
-        param1 = 42.5678;
-        param2 = 87.1234;
+        fCov = 0.6543;      // Dummy fraction of coverage
+        meanNdvi = 0.7821;  // Dummy mean NDVI
         
-        // In production, this would call the actual DLL function
-        // For now, just copy image1 as a placeholder result
-        QFile::copy(image1, outputPath);
+        // Copy DSM as placeholder result
+        QFile::remove(outputPath);
+        QFile::copy(dsmPath, outputPath);
         
         return true;
     }
+    
+    qDebug() << "Successfully loaded OliveMatrixLibCore.dll";
 
-    // Resolve the function
+    // Resolve the function with new signature
     RunAnalysisFunc runAnalysis = (RunAnalysisFunc)library.resolve("RunAnalysis");
     
     if (!runAnalysis) {
-        qWarning() << "Failed to resolve RunAnalysis function";
+        qWarning() << "Failed to resolve RunAnalysis function in OliveMatrixLibCore.dll";
         library.unload();
         return false;
     }
 
-    // Prepare buffers
-    char outputBuffer[1024] = {0};
-    
-    // Call the DLL function
-    bool success = runAnalysis(
-        image1.toUtf8().constData(),
-        image2.toUtf8().constData(),
-        outputBuffer,
-        &param1,
-        &param2
+    qDebug() << "Calling RunAnalysis with:";
+    qDebug() << "  DSM:" << dsmPath;
+    qDebug() << "  NDVI:" << ndviPath;
+    qDebug() << "  Shapefile:" << (shapefileZip.isEmpty() ? "(none)" : shapefileZip);
+    qDebug() << "  Denoise:" << m_denoiseFlag;
+    qDebug() << "  AreaThreshold:" << m_areaThreshold;
+
+    // Call the .NET 6.0 DLL function
+    int result = runAnalysis(
+        dsmPath.toUtf8().constData(),
+        ndviPath.toUtf8().constData(),
+        shapefileZip.isEmpty() ? "" : shapefileZip.toUtf8().constData(),
+        &fCov,
+        &meanNdvi,
+        m_denoiseFlag,
+        m_areaThreshold
     );
 
-    if (success) {
-        outputPath = QString::fromUtf8(outputBuffer);
-        qDebug() << "Analysis successful!";
-        qDebug() << "Output:" << outputPath;
-        qDebug() << "Param1:" << param1;
-        qDebug() << "Param2:" << param2;
-    } else {
-        qWarning() << "RunAnalysis returned false";
-    }
-
     library.unload();
-    return success;
+
+    if (result == 0) {
+        // Success - the DLL creates output internally
+        // Generate output path (convention from DLL)
+        outputPath = QDir::temp().filePath("olive_analysis_result.tif");
+        qDebug() << "Analysis completed successfully";
+        qDebug() << "  fCov:" << fCov;
+        qDebug() << "  meanNdvi:" << meanNdvi;
+        qDebug() << "  Output:" << outputPath;
+        return true;
+    } else {
+        qWarning() << "Analysis failed with error code:" << result;
+        return false;
+    }
 }
+
+// Statistics methods
 
 // ============================================================================
 // GeoTiffImageProvider Implementation

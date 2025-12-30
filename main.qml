@@ -244,7 +244,6 @@ ApplicationWindow {
                         })
                         onImageChanged: (imagePath) => {
                             processor.setImage1(imagePath)
-                            updateAnalysis()
                         }
                     }
                     
@@ -273,7 +272,6 @@ ApplicationWindow {
                         })
                         onImageChanged: (imagePath) => {
                             processor.setImage2(imagePath)
-                            updateAnalysis()
                         }
                     }
                 }
@@ -385,7 +383,7 @@ ApplicationWindow {
                             spacing: 2
                             
                             Label {
-                                text: "Param1"
+                                text: "Fraction Coverage"
                                 font.pixelSize: 11
                                 color: mainWindow.textSecondaryColor
                                 Layout.alignment: Qt.AlignHCenter
@@ -415,7 +413,7 @@ ApplicationWindow {
                             spacing: 2
                             
                             Label {
-                                text: "Param2"
+                                text: "Mean NDVI"
                                 font.pixelSize: 11
                                 color: mainWindow.textSecondaryColor
                                 Layout.alignment: Qt.AlignHCenter
@@ -452,6 +450,10 @@ ApplicationWindow {
             mainWindow.isDarkTheme = darkThemeRadio.checked
             mainWindow.denoiseEnabled = denoiseCheck.checked
             mainWindow.areaThreshold = areaSlider.value
+            
+            // Update processor settings
+            processor.setDenoiseFlag(mainWindow.denoiseEnabled)
+            processor.setAreaThreshold(mainWindow.areaThreshold)
         }
         
         ColumnLayout {
@@ -541,7 +543,15 @@ ApplicationWindow {
         fileMode: FileDialog.OpenFile
         nameFilters: ["ZIP files (*.zip)", "All files (*)"]
         onAccepted: {
-            console.log("Shapefile selected:", selectedFile)
+            var path = selectedFile.toString()
+            if (path.startsWith("file:///")) {
+                path = path.substring(8)
+            } else if (path.startsWith("file://")) {
+                path = path.substring(7)
+            }
+            
+            console.log("Shapefile selected:", path)
+            processor.setShapefileZip(path)
         }
     }
     
@@ -564,12 +574,6 @@ ApplicationWindow {
             // Force update of result image
             resultImage.displayPath = ""
             resultImage.displayPath = path
-        }
-    }
-    
-    function updateAnalysis() {
-        if (processor.hasValidImages && rgbImagePath === "") {
-            processor.runAnalysis()
         }
     }
     
