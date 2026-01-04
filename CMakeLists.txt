@@ -37,56 +37,70 @@ endif()
 find_package(GDAL REQUIRED)
 
 # ============================================================================
-# .NET Hosting - Find nethost library
+# DEPLOYMENT BRIDGE
 # ============================================================================
+# Windows deployment
 if(WIN32)
-    set(NETHOST_SEARCH_PATHS
-        "C:/Program Files/dotnet/packs/Microsoft.NETCore.App.Host.win-x64"
+    # Deploy Qt
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND "${QT6_BIN_DIR}/windeployqt6.exe" ...
     )
     
-    find_library(NETHOST_LIB
-        NAMES nethost
-        PATHS ${NETHOST_SEARCH_PATHS}
-        PATH_SUFFIXES "*/runtimes/win-x64/native" "6.0.*/runtimes/win-x64/native"
-        DOC "Path to nethost.lib"
-    )
+    # Deploy GDAL system DLLs
+    file(GLOB GDAL_DLLS "C:/Sviluppo/gdal/bin/*.dll")
+    foreach(DLL_FILE ${GDAL_DLLS})
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${DLL_FILE}"
+                "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+        )
+    endforeach()
     
-    if(NETHOST_LIB)
-        message(STATUS "Found nethost.lib: ${NETHOST_LIB}")
-    else()
-        message(WARNING "nethost.lib not found - .NET hosting will not work")
-        message(WARNING "Install .NET 6 SDK or set NETHOST_LIB manually:")
-        message(WARNING "  cmake -DNETHOST_LIB=path/to/nethost.lib")
+    # Deploy C++/CLI Bridge
+    set(BRIDGE_DLL "${CMAKE_SOURCE_DIR}/OliveMatrixBridge/x64/Release/OliveMatrixBridge.dll")
+    
+    if(EXISTS "${BRIDGE_DLL}")
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${BRIDGE_DLL}"
+                "$<TARGET_FILE_DIR:${PROJECT_NAME}>/OliveMatrixBridge.dll"
+            COMMENT "Copying OliveMatrixBridge.dll..."
+        )
     endif()
+    
+    # Deploy OliveMatrixLibCore
+    set(OLIVEMATRIX_PATHS
+        "${CMAKE_SOURCE_DIR}/OliveMatrixLibCore/Release"
+        "${CMAKE_SOURCE_DIR}/OliveMatrixLibCore/Debug"
+    )
+    
+    foreach(SEARCH_PATH ${OLIVEMATRIX_PATHS})
+        if(EXISTS "${SEARCH_PATH}/OliveMatrixLibCore.dll")
+            # Copy main DLL
+            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${SEARCH_PATH}/OliveMatrixLibCore.dll"
+                    "$<TARGET_FILE_DIR:${PROJECT_NAME}>/OliveMatrixLibCore.dll"
+            )
+            
+            # Copy GDAL dependencies
+            if(EXISTS "${SEARCH_PATH}/gdal/x64")
+                file(GLOB OLIVEMATRIX_GDAL_DLLS "${SEARCH_PATH}/gdal/x64/*.dll")
+                foreach(DLL_FILE ${OLIVEMATRIX_GDAL_DLLS})
+                    get_filename_component(DLL_NAME "${DLL_FILE}" NAME)
+                    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                            "${DLL_FILE}"
+                            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${DLL_NAME}"
+                    )
+                endforeach()
+            endif()
+            break()
+        endif()
+    endforeach()
 endif()
 
-# ============================================================================
-# OliveMatrixWrapper (.NET 6 C# Project)
-# ============================================================================
-# Build the C# wrapper as a separate project before the main C++ executable
-set(WRAPPER_PROJECT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/OliveMatrixWrapper")
-set(WRAPPER_OUTPUT_DIR "${WRAPPER_PROJECT_DIR}/bin/Release/net6.0")
 
-if(EXISTS "${WRAPPER_PROJECT_DIR}/OliveMatrixWrapper.csproj")
-    message(STATUS "Found OliveMatrixWrapper C# project")
-    
-    # Add custom target to build C# wrapper
-    add_custom_target(BuildOliveMatrixWrapper
-        COMMAND dotnet build "${WRAPPER_PROJECT_DIR}/OliveMatrixWrapper.csproj" -c Release
-        WORKING_DIRECTORY "${WRAPPER_PROJECT_DIR}"
-        COMMENT "Building OliveMatrixWrapper (C#)..."
-        VERBATIM
-    )
-    
-    # Check if wrapper was built successfully
-    if(EXISTS "${WRAPPER_OUTPUT_DIR}/OliveMatrixWrapper.dll")
-        message(STATUS "  Wrapper output: ${WRAPPER_OUTPUT_DIR}")
-    else()
-        message(STATUS "  Wrapper not yet built - will build before main project")
-    endif()
-else()
-    message(WARNING "OliveMatrixWrapper project not found at: ${WRAPPER_PROJECT_DIR}")
-endif()
 
 # ============================================================================
 # Source Files
