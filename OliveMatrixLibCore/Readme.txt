@@ -1,0 +1,1 @@
+Estrarre qui le directory contenute nell'archivio
