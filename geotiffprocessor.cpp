@@ -1,10 +1,11 @@
 #include "geotiffprocessor.h"
-#include "nethost_loader.h"
 #include <QDebug>
 #include <QFileInfo>
 #include <QDir>
 #include <QUrl>
 #include <QCoreApplication>
+#include <QLibrary>
+#include <QFile>
 #include <cmath>
 #include <gdal_priv.h>
 #include <cpl_conv.h>
@@ -114,60 +115,92 @@ void GeoTiffProcessor::runAnalysis()
     if (callRunAnalysis(m_image1Path, m_image2Path, m_shapefileZipPath, outputPath, fCov, meanNdvi)) {
         emit analysisCompleted(outputPath, fCov, meanNdvi);
     } else {
-        emit errorOccurred("Analysis failed. Check that OliveMatrixWrapper and OliveMatrixLibCore is available and compatible.");
+        emit errorOccurred("Analysis failed. Check that OliveMatrixBridge.dll and OliveMatrixLibCore.dll are available and .NET 6 runtime is installed.");
     }
 }
 
 bool GeoTiffProcessor::callRunAnalysis(const QString &dsmPath, const QString &ndviPath,
-                                       const QString &shapefileZip, QString &outputPath,
-                                       double &fCov, double &meanNdvi)
+                                        const QString &shapefileZip, QString &outputPath, 
+                                        double &fCov, double &meanNdvi)
 {
     qDebug() << "=== Loading OliveMatrixBridge (C++/CLI) ===";
-
+    
     QString appDir = QCoreApplication::applicationDirPath();
     QString bridgeDll = appDir + "/OliveMatrixBridge.dll";
-
+    
+    qDebug() << "Application directory:" << appDir;
     qDebug() << "Bridge DLL:" << bridgeDll;
-
+    
+    // Check if bridge exists
     if (!QFile::exists(bridgeDll))
     {
         qWarning() << "OliveMatrixBridge.dll not found at:" << bridgeDll;
-
-        // Fallback dummy
-        outputPath = QDir::temp().filePath("analysis_result.tif");
-        fCov = 0.6543;
-        meanNdvi = 0.7821;
-        QFile::copy(dsmPath, outputPath);
-        return true;
+        qWarning() << "Make sure OliveMatrixBridge was built in Visual Studio";
+        return false;
     }
-
+    
+    qDebug() << "OliveMatrixBridge.dll exists, checking dependencies...";
+    
+    // Check olivematrix subdirectory
+    QString omDir = appDir + "/olivematrix";
+    if (!QDir(omDir).exists())
+    {
+        qWarning() << "olivematrix subdirectory not found at:" << omDir;
+        qWarning() << "Run CMake and build to deploy OliveMatrixLibCore";
+        return false;
+    }
+    
+    QString coreLib = omDir + "/OliveMatrixLibCore.dll";
+    if (!QFile::exists(coreLib))
+    {
+        qWarning() << "OliveMatrixLibCore.dll not found at:" << coreLib;
+        return false;
+    }
+    
+    qDebug() << "olivematrix/ subdirectory exists with OliveMatrixLibCore.dll";
+    
     // Load bridge DLL
     QLibrary bridge(bridgeDll);
-
+    
     if (!bridge.load())
     {
         qWarning() << "Failed to load OliveMatrixBridge.dll:" << bridge.errorString();
+        qWarning() << "";
+        qWarning() << "Possible causes:";
+        qWarning() << "1. .NET 6 Desktop Runtime not installed";
+        qWarning() << "   Download from: https://dotnet.microsoft.com/download/dotnet/6.0";
+        qWarning() << "2. Visual C++ Redistributable missing";
+        qWarning() << "   Download from: https://aka.ms/vs/17/release/vc_redist.x64.exe";
+        qWarning() << "3. Bridge built for wrong platform (must be x64)";
+        qWarning() << "";
+
         return false;
     }
-
+    
     qDebug() << "Successfully loaded OliveMatrixBridge.dll";
-
-    // Get function
-    typedef int (*RunAnalysisFunc)(const char*, const char*, const char*,
-                                   double*, double*, bool, int);
-
+    
+    // Get function pointer
+    typedef int (*RunAnalysisFunc)(const char*, const char*, const char*, 
+                                    double*, double*, bool, int);
+    
     RunAnalysisFunc runAnalysis = (RunAnalysisFunc)bridge.resolve("RunOliveMatrixAnalysis");
-
+    
     if (!runAnalysis)
     {
         qWarning() << "Failed to resolve RunOliveMatrixAnalysis function";
         bridge.unload();
         return false;
     }
-
-    qDebug() << "Calling RunOliveMatrixAnalysis...";
-
-    // Call
+    
+    qDebug() << "Successfully resolved RunOliveMatrixAnalysis function";
+    qDebug() << "Calling RunOliveMatrixAnalysis with:";
+    qDebug() << "  DSM:" << dsmPath;
+    qDebug() << "  NDVI:" << ndviPath;
+    qDebug() << "  Shapefile:" << (shapefileZip.isEmpty() ? "(none)" : shapefileZip);
+    qDebug() << "  Denoise:" << m_denoiseFlag;
+    qDebug() << "  AreaThreshold:" << m_areaThreshold;
+    
+    // Call C++/CLI bridge function
     int result = runAnalysis(
         dsmPath.toUtf8().constData(),
         ndviPath.toUtf8().constData(),
@@ -176,73 +209,14 @@ bool GeoTiffProcessor::callRunAnalysis(const QString &dsmPath, const QString &nd
         &meanNdvi,
         m_denoiseFlag,
         m_areaThreshold
-        );
-
-    bridge.unload();
-
-    qDebug() << "Analysis completed with result code:" << result;
-
-    if (result == 0)
-    {
-        outputPath = QDir::temp().filePath("olive_analysis_result.tif");
-        qDebug() << "Analysis successful";
-        qDebug() << "  fCov:" << fCov;
-        qDebug() << "  meanNdvi:" << meanNdvi;
-        return true;
-    }
-
-    qWarning() << "Analysis failed with error code:" << result;
-    return false;
-}
-    
-    if (!QFile::exists(wrapperConfig)) {
-        qWarning() << "Runtime config not found at:" << wrapperConfig;
-        qWarning() << "Make sure OliveMatrixWrapper.runtimeconfig.json was deployed";
-        return false;
-    }
-    
-    // Initialize .NET host
-    NetHostLoader netHost;
-    
-    if (!netHost.initialize(wrapperDll, wrapperConfig)) {
-        qWarning() << "Failed to initialize .NET host:" << netHost.getLastError();
-        return false;
-    }
-    
-    // Get RunAnalysis function pointer
-    run_analysis_fn runAnalysis = netHost.getRunAnalysisFunction();
-    
-    if (!runAnalysis) {
-        qWarning() << "Failed to get RunAnalysis function pointer";
-        netHost.cleanup();
-        return false;
-    }
-    
-    qDebug() << "Successfully loaded RunAnalysis function from .NET";
-    qDebug() << "Calling RunAnalysis with:";
-    qDebug() << "  DSM:" << dsmPath;
-    qDebug() << "  NDVI:" << ndviPath;
-    qDebug() << "  Shapefile:" << (shapefileZip.isEmpty() ? "(none)" : shapefileZip);
-    qDebug() << "  Denoise:" << m_denoiseFlag;
-    qDebug() << "  AreaThreshold:" << m_areaThreshold;
-    
-    // Call .NET function (native call, zero overhead!)
-    int result = runAnalysis(
-        dsmPath.toUtf8().constData(),
-        ndviPath.toUtf8().constData(),
-        shapefileZip.isEmpty() ? "" : shapefileZip.toUtf8().constData(),
-        &fCov,
-        &meanNdvi,
-        m_denoiseFlag ? 1 : 0,  // Convert bool to int
-        m_areaThreshold
     );
     
-    // Cleanup .NET runtime
-    netHost.cleanup();
+    bridge.unload();
     
     qDebug() << "Analysis completed with result code:" << result;
     
-    if (result == 0) {
+    if (result == 0)
+    {
         // Success
         outputPath = QDir::temp().filePath("olive_analysis_result.tif");
         qDebug() << "Analysis successful";
@@ -250,7 +224,9 @@ bool GeoTiffProcessor::callRunAnalysis(const QString &dsmPath, const QString &nd
         qDebug() << "  meanNdvi:" << meanNdvi;
         qDebug() << "  Output:" << outputPath;
         return true;
-    } else {
+    }
+    else
+    {
         qWarning() << "Analysis failed with error code:" << result;
         return false;
     }

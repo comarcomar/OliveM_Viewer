@@ -10,7 +10,7 @@ int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
     
-    // Initialize GDAL
+    // Initialize GDAL (uses system GDAL from C:\Sviluppo\gdal\bin via PATH)
     GDALAllRegister();
     qDebug() << "GDAL initialized, version:" << GDALVersionInfo("VERSION_NUM");
     
