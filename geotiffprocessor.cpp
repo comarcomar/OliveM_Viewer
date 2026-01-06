@@ -276,7 +276,7 @@ bool GeoTiffProcessor::callRunAnalysis(const QString &dsmPath, const QString &nd
         return false;
     }
         return false;
-    }
+
 }
 
 // Statistics methods
