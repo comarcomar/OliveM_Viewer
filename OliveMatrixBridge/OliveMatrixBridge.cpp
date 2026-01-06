@@ -129,8 +129,17 @@ extern "C" OLIVEMATRIX_API int RunOliveMatrixAnalysis(
             
             int returnCode = safe_cast<int>(result);
             
-            Console::WriteLine("[Bridge] Analysis complete. Result: {0}, fCov: {1}, meanNdvi: {2}", 
-                returnCode, *fCov, *meanNdvi);
+            if (returnCode == 0)
+            {
+                Console::WriteLine("[Bridge] Analysis SUCCESSFUL. Result: {0}, fCov: {1}, meanNdvi: {2}", 
+                    returnCode, *fCov, *meanNdvi);
+            }
+            else
+            {
+                Console::WriteLine("[Bridge] Analysis FAILED. Error code: {0}", returnCode);
+                Console::WriteLine("[Bridge]   fCov: {0}", *fCov);
+                Console::WriteLine("[Bridge]   meanNdvi: {0}", *meanNdvi);
+            }
             
             // Restore original directory
             Directory::SetCurrentDirectory(originalDir);

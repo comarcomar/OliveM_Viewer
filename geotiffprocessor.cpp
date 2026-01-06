@@ -217,17 +217,64 @@ bool GeoTiffProcessor::callRunAnalysis(const QString &dsmPath, const QString &nd
     
     if (result == 0)
     {
-        // Success
-        outputPath = QDir::temp().filePath("olive_analysis_result.tif");
+        // Success - OliveMatrixLibCore saves output in clippedDir subdirectory
+        // File format: treeCrown_<timestamp>.tif
+        
         qDebug() << "Analysis successful";
         qDebug() << "  fCov:" << fCov;
         qDebug() << "  meanNdvi:" << meanNdvi;
-        qDebug() << "  Output:" << outputPath;
+        
+        // Find output file in clippedDir subdirectory of DSM directory
+        QFileInfo dsmInfo(dsmPath);
+        QString dsmDir = dsmInfo.absolutePath();
+        QString clippedDir = dsmDir + "/clippedDir";
+        
+        qDebug() << "  DSM directory:" << dsmDir;
+        qDebug() << "  Looking for output in:" << clippedDir;
+        
+        if (!QDir(clippedDir).exists())
+        {
+            qWarning() << "clippedDir subdirectory not found at:" << clippedDir;
+            qWarning() << "OliveMatrixLibCore may not have created output files";
+            return false;
+        }
+        
+        // Find treeCrown_*.tif file (newest one)
+        QDir outputDir(clippedDir);
+        QStringList filters;
+        filters << "treeCrown_*.tif";
+        QFileInfoList files = outputDir.entryInfoList(filters, QDir::Files, QDir::Time);
+        
+        if (files.isEmpty())
+        {
+            qWarning() << "No treeCrown_*.tif file found in:" << clippedDir;
+            qWarning() << "Available files:";
+            QFileInfoList allFiles = outputDir.entryInfoList(QDir::Files);
+            for (const QFileInfo &file : allFiles)
+            {
+                qWarning() << "  -" << file.fileName();
+            }
+            return false;
+        }
+        
+        // Get most recent file (first in time-sorted list)
+        outputPath = files.first().absoluteFilePath();
+        qDebug() << "  Output file:" << outputPath;
+        
         return true;
     }
     else
     {
-        qWarning() << "Analysis failed with error code:" << result;
+        qWarning() << "Analysis FAILED with error code:" << result;
+        qWarning() << "";
+        qWarning() << "Error code meanings:";
+        qWarning() << "  -1  : General error";
+        qWarning() << "  -37 : File not found or GDAL error";
+        qWarning() << "  Other: Check OliveMatrixLibCore documentation";
+        qWarning() << "";
+        qWarning() << "Check console output above for detailed error messages from [Bridge]";
+        return false;
+    }
         return false;
     }
 }

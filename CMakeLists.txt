@@ -101,26 +101,49 @@ if(WIN32)
         endif()
     endif()
     
-    # OliveMatrixLibCore → olivematrix/
+    # OliveMatrixLibCore → olivematrix/ (PRESERVE COMPLETE STRUCTURE)
     set(OM_DEPLOY_DIR "$<TARGET_FILE_DIR:${PROJECT_NAME}>/olivematrix")
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${OM_DEPLOY_DIR}"
-    )
     
-    set(OLIVEMATRIX_PATHS 
-        "${CMAKE_SOURCE_DIR}/OliveMatrixLibCore/Release"
-        "${CMAKE_SOURCE_DIR}/OliveMatrixLibCore/Debug"
-    )
+    # Use CMAKE_BUILD_TYPE to select correct source directory
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        set(OLIVEMATRIX_SOURCE "${CMAKE_SOURCE_DIR}/OliveMatrixLibCore/Debug")
+    else()
+        set(OLIVEMATRIX_SOURCE "${CMAKE_SOURCE_DIR}/OliveMatrixLibCore/Release")
+    endif()
     
-    foreach(SEARCH_PATH ${OLIVEMATRIX_PATHS})
-        if(EXISTS "${SEARCH_PATH}" AND NOT OLIVEMATRIX_COPIED)
-            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_directory "${SEARCH_PATH}" "${OM_DEPLOY_DIR}"
-                COMMENT "Copying OliveMatrixLibCore (complete with runtimes/)"
-            )
-            set(OLIVEMATRIX_COPIED TRUE)
+    # Fallback: try both if one doesn't exist
+    if(NOT EXISTS "${OLIVEMATRIX_SOURCE}/OliveMatrixLibCore.dll")
+        if(EXISTS "${CMAKE_SOURCE_DIR}/OliveMatrixLibCore/Release/OliveMatrixLibCore.dll")
+            set(OLIVEMATRIX_SOURCE "${CMAKE_SOURCE_DIR}/OliveMatrixLibCore/Release")
+            message(STATUS "Using Release build (Debug not found)")
+        elseif(EXISTS "${CMAKE_SOURCE_DIR}/OliveMatrixLibCore/Debug/OliveMatrixLibCore.dll")
+            set(OLIVEMATRIX_SOURCE "${CMAKE_SOURCE_DIR}/OliveMatrixLibCore/Debug")
+            message(STATUS "Using Debug build (Release not found)")
         endif()
-    endforeach()
+    endif()
+    
+    if(EXISTS "${OLIVEMATRIX_SOURCE}/OliveMatrixLibCore.dll")
+        message(STATUS "Deploying OliveMatrixLibCore from: ${OLIVEMATRIX_SOURCE}")
+        message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
+        message(STATUS "  Copying complete directory structure:")
+        message(STATUS "    - OliveMatrixLibCore.dll + other DLLs")
+        message(STATUS "    - dll/x64/")
+        message(STATUS "    - gdal/data/")
+        message(STATUS "    - gdal/share/")
+        message(STATUS "    - gdal/x64/")
+        
+        # Copy entire directory recursively - preserves ALL subdirectories
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory 
+                "${OLIVEMATRIX_SOURCE}" 
+                "${OM_DEPLOY_DIR}"
+            COMMENT "Copying OliveMatrixLibCore (${CMAKE_BUILD_TYPE})"
+        )
+    else()
+        message(WARNING "OliveMatrixLibCore.dll not found in:")
+        message(WARNING "  ${CMAKE_SOURCE_DIR}/OliveMatrixLibCore/Release/")
+        message(WARNING "  ${CMAKE_SOURCE_DIR}/OliveMatrixLibCore/Debug/")
+    endif()
 endif()
 
 install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION bin)
