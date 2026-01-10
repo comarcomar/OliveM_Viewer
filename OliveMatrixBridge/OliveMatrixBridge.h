@@ -8,10 +8,11 @@
 
 extern "C" {
     // Native C-style export for use from Qt C++
+    // Use wchar_t* for proper UTF-16 marshaling to C# String
     OLIVEMATRIX_API int RunOliveMatrixAnalysis(
-        const char* srcDsmDataset,
-        const char* srcNdviDataset,
-        const char* shapefileZip,
+        const wchar_t* srcDsmDataset,
+        const wchar_t* srcNdviDataset,
+        const wchar_t* shapefileZip,
         double* fCov,
         double* meanNdvi,
         bool denoiseFlag,

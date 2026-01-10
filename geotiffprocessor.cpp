@@ -6,6 +6,7 @@
 #include <QCoreApplication>
 #include <QLibrary>
 #include <QFile>
+#include <string>
 #include <cmath>
 #include <gdal_priv.h>
 #include <cpl_conv.h>
@@ -141,23 +142,16 @@ bool GeoTiffProcessor::callRunAnalysis(const QString &dsmPath, const QString &nd
     
     qDebug() << "OliveMatrixBridge.dll exists, checking dependencies...";
     
-    // Check olivematrix subdirectory
-    QString omDir = appDir + "/olivematrix";
-    if (!QDir(omDir).exists())
+    // Check if OliveMatrixLibCore.dll exists in same directory
+    QString coreLib = appDir + "/OliveMatrixLibCore.dll";
+    if (!QFile::exists(coreLib))
     {
-        qWarning() << "olivematrix subdirectory not found at:" << omDir;
+        qWarning() << "OliveMatrixLibCore.dll not found at:" << coreLib;
         qWarning() << "Run CMake and build to deploy OliveMatrixLibCore";
         return false;
     }
     
-    QString coreLib = omDir + "/OliveMatrixLibCore.dll";
-    if (!QFile::exists(coreLib))
-    {
-        qWarning() << "OliveMatrixLibCore.dll not found at:" << coreLib;
-        return false;
-    }
-    
-    qDebug() << "olivematrix/ subdirectory exists with OliveMatrixLibCore.dll";
+    qDebug() << "OliveMatrixLibCore.dll found in app directory";
     
     // Load bridge DLL
     QLibrary bridge(bridgeDll);
@@ -180,7 +174,7 @@ bool GeoTiffProcessor::callRunAnalysis(const QString &dsmPath, const QString &nd
     qDebug() << "Successfully loaded OliveMatrixBridge.dll";
     
     // Get function pointer
-    typedef int (*RunAnalysisFunc)(const char*, const char*, const char*, 
+    typedef int (*RunAnalysisFunc)(const wchar_t*, const wchar_t*, const wchar_t*, 
                                     double*, double*, bool, int);
     
     RunAnalysisFunc runAnalysis = (RunAnalysisFunc)bridge.resolve("RunOliveMatrixAnalysis");
@@ -193,18 +187,51 @@ bool GeoTiffProcessor::callRunAnalysis(const QString &dsmPath, const QString &nd
     }
     
     qDebug() << "Successfully resolved RunOliveMatrixAnalysis function";
-    qDebug() << "Calling RunOliveMatrixAnalysis with:";
-    qDebug() << "  DSM:" << dsmPath;
-    qDebug() << "  NDVI:" << ndviPath;
-    qDebug() << "  Shapefile:" << (shapefileZip.isEmpty() ? "(none)" : shapefileZip);
+    
+    // Convert to Windows native format (backslashes)
+    // OliveMatrixLibCore uses Windows paths internally
+    QString winDsmPath = QDir::toNativeSeparators(dsmPath);
+    QString winNdviPath = QDir::toNativeSeparators(ndviPath);
+    QString winShapefilePath = shapefileZip.isEmpty() ? QString() : QDir::toNativeSeparators(shapefileZip);
+    
+    // Manual conversion QString -> wchar_t* (UTF-16)
+    const ushort* dsmUtf16 = winDsmPath.utf16();
+    const ushort* ndviUtf16 = winNdviPath.utf16();
+    const ushort* shapeUtf16 = winShapefilePath.isEmpty() ? nullptr : winShapefilePath.utf16();
+    
+    // Cast ushort* to wchar_t*
+    const wchar_t* dsmWide = reinterpret_cast<const wchar_t*>(dsmUtf16);
+    const wchar_t* ndviWide = reinterpret_cast<const wchar_t*>(ndviUtf16);
+    const wchar_t* shapeWide = shapeUtf16 ? reinterpret_cast<const wchar_t*>(shapeUtf16) : L"";
+    
+    qDebug() << "Calling RunOliveMatrixAnalysis with Windows paths:";
+    qDebug() << "  DSM:" << winDsmPath;
+    qDebug() << "  NDVI:" << winNdviPath;
+    qDebug() << "  Shapefile:" << (winShapefilePath.isEmpty() ? "(none)" : winShapefilePath);
     qDebug() << "  Denoise:" << m_denoiseFlag;
     qDebug() << "  AreaThreshold:" << m_areaThreshold;
     
-    // Call C++/CLI bridge function
+    // Pre-create clippedDir directory
+    QFileInfo dsmInfo(dsmPath);
+    QString dsmDir = dsmInfo.absolutePath();
+    QString clippedDir = dsmDir + "/clippedDir";
+    
+    if (!QDir(clippedDir).exists())
+    {
+        qDebug() << "Creating clippedDir:" << clippedDir;
+        if (!QDir().mkpath(clippedDir))
+        {
+            qWarning() << "Failed to create clippedDir directory";
+            bridge.unload();
+            return false;
+        }
+    }
+    
+    // Call with direct wchar_t* from QString::utf16()
     int result = runAnalysis(
-        dsmPath.toUtf8().constData(),
-        ndviPath.toUtf8().constData(),
-        shapefileZip.isEmpty() ? "" : shapefileZip.toUtf8().constData(),
+        dsmWide,
+        ndviWide,
+        shapeWide,
         &fCov,
         &meanNdvi,
         m_denoiseFlag,
@@ -227,7 +254,7 @@ bool GeoTiffProcessor::callRunAnalysis(const QString &dsmPath, const QString &nd
         // Find output file in clippedDir subdirectory of DSM directory
         QFileInfo dsmInfo(dsmPath);
         QString dsmDir = dsmInfo.absolutePath();
-        QString clippedDir = dsmDir + "/clippedDir";
+        QString clippedDir = dsmDir + "/clippedDir";  // Forward slash
         
         qDebug() << "  DSM directory:" << dsmDir;
         qDebug() << "  Looking for output in:" << clippedDir;
@@ -275,8 +302,6 @@ bool GeoTiffProcessor::callRunAnalysis(const QString &dsmPath, const QString &nd
         qWarning() << "Check console output above for detailed error messages from [Bridge]";
         return false;
     }
-        return false;
-
 }
 
 // Statistics methods

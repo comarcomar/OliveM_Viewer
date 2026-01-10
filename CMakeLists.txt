@@ -101,10 +101,10 @@ if(WIN32)
         endif()
     endif()
     
-    # OliveMatrixLibCore → olivematrix/ (PRESERVE COMPLETE STRUCTURE)
-    set(OM_DEPLOY_DIR "$<TARGET_FILE_DIR:${PROJECT_NAME}>/olivematrix")
+    # OliveMatrixLibCore → app directory root (NO subdirectory)
+    # Deploy all content (DLLs, gdal/, dll/, runtimes/) directly to executable directory
+    # This allows GdalConfiguration.cs to find gdal/ relative to OliveMatrixBridge.dll
     
-    # Use CMAKE_BUILD_TYPE to select correct source directory
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         set(OLIVEMATRIX_SOURCE "${CMAKE_SOURCE_DIR}/OliveMatrixLibCore/Debug")
     else()
@@ -125,20 +125,37 @@ if(WIN32)
     if(EXISTS "${OLIVEMATRIX_SOURCE}/OliveMatrixLibCore.dll")
         message(STATUS "Deploying OliveMatrixLibCore from: ${OLIVEMATRIX_SOURCE}")
         message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
-        message(STATUS "  Copying complete directory structure:")
+        message(STATUS "  Deploying to: $<TARGET_FILE_DIR:${PROJECT_NAME}>")
+        message(STATUS "  Complete directory structure:")
         message(STATUS "    - OliveMatrixLibCore.dll + other DLLs")
         message(STATUS "    - dll/x64/")
         message(STATUS "    - gdal/data/")
         message(STATUS "    - gdal/share/")
         message(STATUS "    - gdal/x64/")
+        message(STATUS "    - runtimes/")
         
-        # Copy entire directory recursively - preserves ALL subdirectories
+        # Copy entire OliveMatrixLibCore directory content to app root
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_directory 
                 "${OLIVEMATRIX_SOURCE}" 
-                "${OM_DEPLOY_DIR}"
-            COMMENT "Copying OliveMatrixLibCore (${CMAKE_BUILD_TYPE})"
+                "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+            COMMENT "Deploying OliveMatrixLibCore to app root (${CMAKE_BUILD_TYPE})"
         )
+        
+        message(STATUS "")
+        message(STATUS "Final deployment structure:")
+        message(STATUS "  build/Debug/")
+        message(STATUS "    ├── OliveM_Viewer.exe")
+        message(STATUS "    ├── OliveMatrixBridge.dll")
+        message(STATUS "    ├── OliveMatrixLibCore.dll")
+        message(STATUS "    ├── [Qt DLLs]")
+        message(STATUS "    ├── [GDAL system DLLs]")
+        message(STATUS "    ├── dll/x64/        ← OliveMatrix dependencies")
+        message(STATUS "    ├── gdal/           ← OliveMatrix GDAL")
+        message(STATUS "    │   ├── data/")
+        message(STATUS "    │   ├── share/")
+        message(STATUS "    │   └── x64/")
+        message(STATUS "    └── runtimes/       ← .NET runtimes")
     else()
         message(WARNING "OliveMatrixLibCore.dll not found in:")
         message(WARNING "  ${CMAKE_SOURCE_DIR}/OliveMatrixLibCore/Release/")
