@@ -60,15 +60,18 @@ if(WIN32)
         VERBATIM
     )
     
-    # GDAL Sistema
-    if(DEFINED GDAL_BIN_DIR AND EXISTS "${GDAL_BIN_DIR}")
-        file(GLOB GDAL_SYSTEM_DLLS "${GDAL_BIN_DIR}/*.dll")
-        foreach(DLL_FILE ${GDAL_SYSTEM_DLLS})
-            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DLL_FILE}" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/"
-            )
-        endforeach()
-    endif()
+    # GDAL System DLLs - DISABLED
+    # Using OliveMatrix GDAL instead to avoid version conflicts
+    # OliveMatrix GDAL DLLs are deployed to app root from OliveMatrixLibCore
+    #
+    # if(DEFINED GDAL_BIN_DIR AND EXISTS "${GDAL_BIN_DIR}")
+    #     file(GLOB GDAL_SYSTEM_DLLS "${GDAL_BIN_DIR}/*.dll")
+    #     foreach(DLL_FILE ${GDAL_SYSTEM_DLLS})
+    #         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    #             COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DLL_FILE}" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/"
+    #         )
+    #     endforeach()
+    # endif()
     
     # C++/CLI Bridge
     set(BRIDGE_DIR "${CMAKE_SOURCE_DIR}/OliveMatrixBridge/x64/Release")
@@ -148,12 +151,13 @@ if(WIN32)
         message(STATUS "    ├── OliveM_Viewer.exe")
         message(STATUS "    ├── OliveMatrixBridge.dll")
         message(STATUS "    ├── OliveMatrixLibCore.dll")
+        message(STATUS "    ├── ijwhost.dll")
         message(STATUS "    ├── [Qt DLLs]")
-        message(STATUS "    ├── [GDAL system DLLs]")
+        message(STATUS "    ├── [GDAL DLLs from OliveMatrix] ← SINGLE VERSION")
         message(STATUS "    ├── dll/x64/        ← OliveMatrix dependencies")
         message(STATUS "    ├── gdal/           ← OliveMatrix GDAL")
         message(STATUS "    │   ├── data/")
-        message(STATUS "    │   ├── share/")
+        message(STATUS "    │   ├── share/      ← PROJ database")
         message(STATUS "    │   └── x64/")
         message(STATUS "    └── runtimes/       ← .NET runtimes")
     else()

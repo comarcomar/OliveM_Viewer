@@ -1,0 +1,6 @@
+
+gdal 3.6.3
+Creare una cartella gis e copiarvi file e cartelle conteute negli archivi:
+
+https://build2.gisinternals.com/sdk/downloads/release-1930-x64-gdal-3-6-3-mapserver-8-0-0.zip
+https://build2.gisinternals.com/sdk/downloads/release-1930-x64-gdal-3-6-3-mapserver-8-0-0-libs.zip
