@@ -211,21 +211,7 @@ bool GeoTiffProcessor::callRunAnalysis(const QString &dsmPath, const QString &nd
     qDebug() << "  Denoise:" << m_denoiseFlag;
     qDebug() << "  AreaThreshold:" << m_areaThreshold;
     
-    // Pre-create clippedDir directory
-    QFileInfo dsmInfo(dsmPath);
-    QString dsmDir = dsmInfo.absolutePath();
-    QString clippedDir = dsmDir + "/clippedDir";
-    
-    if (!QDir(clippedDir).exists())
-    {
-        qDebug() << "Creating clippedDir:" << clippedDir;
-        if (!QDir().mkpath(clippedDir))
-        {
-            qWarning() << "Failed to create clippedDir directory";
-            bridge.unload();
-            return false;
-        }
-    }
+    // OliveMatrixLibCore creates clippedDir automatically
     
     // Call with direct wchar_t* from QString::utf16()
     int result = runAnalysis(

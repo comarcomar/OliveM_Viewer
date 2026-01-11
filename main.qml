@@ -285,8 +285,9 @@ ApplicationWindow {
             
             // Right panel - Analysis result or RGB
             Rectangle {
-                Layout.fillHeight: true
                 Layout.fillWidth: true
+                Layout.alignment: Qt.AlignTop
+                implicitHeight: image1Panel.height + 7 + image2Panel.height  // Match left panel total height
                 color: mainWindow.backgroundColor
                 
                 ColumnLayout {
@@ -294,48 +295,16 @@ ApplicationWindow {
                     anchors.margins: 10
                     spacing: 10
                     
-                    // Header row with fixed height
-                    Item {
+                    // Header with title only
+                    Label {
+                        text: rgbImagePath !== "" ? "RGB Orthophoto" : "Analysis Result"
+                        font.pixelSize: 18
+                        font.bold: true
+                        color: mainWindow.textColor
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 80
-                        
-                        ColumnLayout {
-                            anchors.fill: parent
-                            spacing: 10
-                            
-                            Label {
-                                text: rgbImagePath !== "" ? "RGB Orthophoto" : "Analysis Result"
-                                font.pixelSize: 18
-                                font.bold: true
-                                color: mainWindow.textColor
-                            }
-                            
-                            Button {
-                                text: "Run Analysis"
-                                Layout.preferredHeight: 35
-                                Layout.preferredWidth: 150
-                                enabled: processor.hasValidImages && rgbImagePath === ""
-                                visible: rgbImagePath === ""
-                                onClicked: processor.runAnalysis()
-                                
-                                background: Rectangle {
-                                    color: parent.enabled ? (parent.pressed ? "#006600" : 
-                                           (parent.hovered ? "#008800" : "#00aa00")) : "#404040"
-                                    radius: 4
-                                }
-                                
-                                contentItem: Text {
-                                    text: parent.text
-                                    color: "#ffffff"
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                    font.pixelSize: 13
-                                    font.bold: true
-                                }
-                            }
-                        }
                     }
                     
+                    // Result viewer
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -348,6 +317,32 @@ ApplicationWindow {
                             anchors.fill: parent
                             anchors.margins: 5
                             displayPath: rgbImagePath !== "" ? rgbImagePath : ""
+                        }
+                    }
+                    
+                    // Run Analysis button - positioned below result viewer
+                    Button {
+                        text: "Run Analysis"
+                        Layout.preferredHeight: 40
+                        Layout.preferredWidth: 180
+                        Layout.alignment: Qt.AlignHCenter
+                        enabled: processor.hasValidImages && rgbImagePath === ""
+                        visible: rgbImagePath === ""
+                        onClicked: processor.runAnalysis()
+                        
+                        background: Rectangle {
+                            color: parent.enabled ? (parent.pressed ? "#006600" : 
+                                   (parent.hovered ? "#008800" : "#00aa00")) : "#404040"
+                            radius: 4
+                        }
+                        
+                        contentItem: Text {
+                            text: parent.text
+                            color: "#ffffff"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            font.pixelSize: 14
+                            font.bold: true
                         }
                     }
                 }
