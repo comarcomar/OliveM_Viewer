@@ -283,11 +283,10 @@ ApplicationWindow {
                 color: mainWindow.borderColor
             }
             
-            // Right panel - Analysis result or RGB
+            // Right panel - Analysis result or RGB  
             Rectangle {
                 Layout.fillWidth: true
-                Layout.alignment: Qt.AlignTop
-                implicitHeight: image1Panel.height + 7 + image2Panel.height  // Match left panel total height
+                Layout.fillHeight: true  // Match left panel height
                 color: mainWindow.backgroundColor
                 
                 ColumnLayout {
@@ -295,7 +294,7 @@ ApplicationWindow {
                     anchors.margins: 10
                     spacing: 10
                     
-                    // Header with title only
+                    // Header with title
                     Label {
                         text: rgbImagePath !== "" ? "RGB Orthophoto" : "Analysis Result"
                         font.pixelSize: 18
@@ -304,7 +303,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                     }
                     
-                    // Result viewer
+                    // Result viewer - fills all remaining space
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -319,32 +318,6 @@ ApplicationWindow {
                             displayPath: rgbImagePath !== "" ? rgbImagePath : ""
                         }
                     }
-                    
-                    // Run Analysis button - positioned below result viewer
-                    Button {
-                        text: "Run Analysis"
-                        Layout.preferredHeight: 40
-                        Layout.preferredWidth: 180
-                        Layout.alignment: Qt.AlignHCenter
-                        enabled: processor.hasValidImages && rgbImagePath === ""
-                        visible: rgbImagePath === ""
-                        onClicked: processor.runAnalysis()
-                        
-                        background: Rectangle {
-                            color: parent.enabled ? (parent.pressed ? "#006600" : 
-                                   (parent.hovered ? "#008800" : "#00aa00")) : "#404040"
-                            radius: 4
-                        }
-                        
-                        contentItem: Text {
-                            text: parent.text
-                            color: "#ffffff"
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                            font.pixelSize: 14
-                            font.bold: true
-                        }
-                    }
                 }
             }
         }
@@ -355,7 +328,7 @@ ApplicationWindow {
             color: mainWindow.borderColor
         }
         
-        // Bottom panel - Parameters
+        // Bottom panel - Button and Parameters
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 80
@@ -364,17 +337,47 @@ ApplicationWindow {
             RowLayout {
                 anchors.fill: parent
                 anchors.margins: 15
-                spacing: 30
+                spacing: 20
                 
-                Label {
-                    text: "Analysis Parameters:"
-                    font.pixelSize: 14
-                    font.bold: true
-                    color: mainWindow.textColor
+                // Left spacer - aligns button with left panel width
+                Item {
+                    Layout.preferredWidth: parent.width * 0.35
                 }
                 
+                // Run Analysis button - ALWAYS VISIBLE ✓
+                Button {
+                    text: "▶ Run Analysis"
+                    Layout.preferredHeight: 50
+                    Layout.preferredWidth: 200
+                    enabled: processor.hasValidImages
+                    // NO visible property - always shown!
+                    onClicked: processor.runAnalysis()
+                    
+                    background: Rectangle {
+                        color: parent.enabled ? (parent.pressed ? "#006600" : 
+                               (parent.hovered ? "#008800" : "#00aa00")) : "#404040"
+                        radius: 4
+                    }
+                    
+                    contentItem: Text {
+                        text: parent.text
+                        color: "#ffffff"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        font.pixelSize: 14
+                        font.bold: true
+                    }
+                }
+                
+                // Spacer between button and parameters
+                Item {
+                    Layout.fillWidth: true
+                }
+                
+                // Parameters - aligned to right (RGB panel right edge)
                 RowLayout {
                     spacing: 10
+                    Layout.alignment: Qt.AlignRight
                     
                     Rectangle {
                         width: 200
@@ -436,8 +439,6 @@ ApplicationWindow {
                         }
                     }
                 }
-                
-                Item { Layout.fillWidth: true }
             }
         }
     }
