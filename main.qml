@@ -41,10 +41,8 @@ ApplicationWindow {
     GeoTiffProcessor {
         id: processor
         onAnalysisCompleted: (resultPath, param1, param2) => {
-            // Only update result image if NO RGB is loaded
-            if (rgbImagePath === "") {
-                resultImage.updateImage(resultPath)
-            }
+            // Always update result - dual layer system handles both RGB and result
+            resultImage.updateImage(resultPath)
             param1Text.text = param1.toFixed(4)
             param2Text.text = param2.toFixed(4)
         }
@@ -230,7 +228,7 @@ ApplicationWindow {
                         id: image1Panel
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        panelTitle: "Ortofoto DSM"
+                        panelTitle: "Input DSM"
                         colorMaps: mainWindow.colorMaps
                         processor: processor
                         themeColors: ({
@@ -258,7 +256,7 @@ ApplicationWindow {
                         id: image2Panel
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        panelTitle: "Ortofoto NDVI"
+                        panelTitle: "Input NDVI"
                         colorMaps: mainWindow.colorMaps
                         processor: processor
                         themeColors: ({
@@ -296,7 +294,7 @@ ApplicationWindow {
                     
                     // Header with title
                     Label {
-                        text: rgbImagePath !== "" ? "RGB Orthophoto" : "Analysis Result"
+                        text: "Analysis Result"
                         font.pixelSize: 18
                         font.bold: true
                         color: mainWindow.textColor
