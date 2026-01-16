@@ -294,7 +294,7 @@ ApplicationWindow {
                     
                     // Header with title
                     Label {
-                        text: "Analysis Result"
+                        text: "Analysis Result-"
                         font.pixelSize: 18
                         font.bold: true
                         color: mainWindow.textColor

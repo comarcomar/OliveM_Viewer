@@ -8,14 +8,15 @@ Item {
     
     property string resultPath: ""
     property string displayPath: ""
-    //
+    ////
     // Layer visibility controls
     property bool showRgbLayer: true
     property bool showResultLayer: true
     
     // Result overlay settings
     property color overlayColor: "#ff0000"  // Red default
-    property real overlayOpacity: 0.6
+    property real overlayOpacity: 0.8
+    property int colormapMode: 0  // 0=Jet, 1=Viridis, 2=Turbo
     
     onOverlayColorChanged: {
         console.log("Overlay color changed to:", overlayColor)
@@ -129,79 +130,28 @@ Item {
                         sourceSize.width: 2048
                         sourceSize.height: 2048
                         visible: root.showRgbLayer && root.displayPath !== ""
-                        
+                        z: 0
                         onStatusChanged: {
                             if (status === Image.Ready) {
                                 console.log("✓ RGB layer loaded")
                             }
                         }
                     }
-                    
-                    // Layer 2: Result overlay
-                    Item {
+
+                    // Layer 2: Result image sopra, colorata solo in falsi colori
+                    Image {
+                        id: resultImage
                         anchors.fill: parent
+                        fillMode: Image.PreserveAspectFit
+                        cache: false
+                        asynchronous: true
+                        sourceSize.width: 2048
+                        sourceSize.height: 2048
                         visible: root.showResultLayer && root.resultPath !== ""
-                        
-                        // Source image - ALWAYS visible (shader needs texture)
-                        // Hidden visually by z-order when false color active
-                        Image {
-                            id: resultImage
-                            anchors.fill: parent
-                            fillMode: Image.PreserveAspectFit
-                            cache: false
-                            asynchronous: true
-                            sourceSize.width: 2048
-                            sourceSize.height: 2048
-                            visible: true  // ALWAYS visible for shader
-                            opacity: colorModeCheck.checked ? 0 : 1  // Hidden in false color mode
-                            
-                            onStatusChanged: {
-                                console.log("Result loaded, status:", status)
-                            }
-                        }
-                        
-                        // False color shader effect
-                        ShaderEffect {
-                            anchors.fill: parent
-                            visible: colorModeCheck.checked && resultImage.status === Image.Ready
-                            z: 1  // Above resultImage
-                            
-                            property variant src: resultImage
-                            property vector4d colorVec: Qt.vector4d(
-                                root.overlayColor.r,
-                                root.overlayColor.g, 
-                                root.overlayColor.b,
-                                root.overlayOpacity
-                            )
-                            
-                            vertexShader: "
-                                attribute highp vec4 qt_Vertex;
-                                attribute highp vec2 qt_MultiTexCoord0;
-                                uniform highp mat4 qt_Matrix;
-                                varying highp vec2 qt_TexCoord0;
-                                void main() {
-                                    qt_TexCoord0 = qt_MultiTexCoord0;
-                                    gl_Position = qt_Matrix * qt_Vertex;
-                                }
-                            "
-                            
-                            fragmentShader: "
-                                varying highp vec2 qt_TexCoord0;
-                                uniform sampler2D src;
-                                uniform lowp vec4 colorVec;
-                                uniform lowp float qt_Opacity;
-                                
-                                void main() {
-                                    lowp vec4 tex = texture2D(src, qt_TexCoord0);
-                                    lowp float gray = (tex.r + tex.g + tex.b) / 3.0;
-                                    
-                                    if (gray < 0.1) {
-                                        gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0);
-                                    } else {
-                                        gl_FragColor = vec4(colorVec.rgb, colorVec.a * gray * qt_Opacity);
-                                    }
-                                }
-                            "
+                        z: 1
+                        opacity: colorModeCheck.checked ? root.overlayOpacity : 1
+                        onStatusChanged: {
+                            console.log("Result loaded, status:", status)
                         }
                     }
                 }
@@ -288,20 +238,17 @@ Item {
                     enabled: root.resultPath !== ""
                 }
                 
-                // Color picker
+                // Palette colori per la maschera
                 Label {
-                    text: "Color:"
+                    text: "Colore:"
                     color: "#cccccc"
                     visible: colorModeCheck.checked
                 }
-                
                 Row {
                     spacing: 3
                     visible: colorModeCheck.checked
-                    
                     Repeater {
                         model: ["#ff0000", "#00ff00", "#0000ff", "#ffff00", "#ff00ff", "#00ffff", "#ffffff", "#ff8800"]
-                        
                         Rectangle {
                             width: 30
                             height: 30
@@ -309,7 +256,6 @@ Item {
                             border.color: root.overlayColor === modelData ? "#ffffff" : "#666666"
                             border.width: root.overlayColor === modelData ? 3 : 1
                             radius: 3
-                            
                             MouseArea {
                                 anchors.fill: parent
                                 onClicked: root.overlayColor = modelData
