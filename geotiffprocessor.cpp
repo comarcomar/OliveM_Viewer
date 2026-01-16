@@ -7,9 +7,271 @@
 #include <QLibrary>
 #include <QFile>
 #include <string>
+#include <cstring>
 #include <cmath>
+#include <vector>
 #include <gdal_priv.h>
-#include <cpl_conv.h>
+#include <gdalwarper.h>
+
+// Riallinea srcPath su refPath usando GDAL e restituisce QImage allineata
+QImage GeoTiffProcessor::warpImageToMatch(const QString &srcPath, const QString &refPath)
+{
+    qDebug() << "warpImageToMatch called:";
+    qDebug() << "  srcPath:" << srcPath;
+    qDebug() << "  refPath:" << refPath;
+    
+    // Pulisci i path da file:/// e decodifica
+    QString srcClean = srcPath;
+    if (srcClean.startsWith("file:///")) srcClean = srcClean.mid(8);
+    else if (srcClean.startsWith("file://")) srcClean = srcClean.mid(7);
+    srcClean = QUrl::fromPercentEncoding(srcClean.toUtf8());
+    
+    QString refClean = refPath;
+    if (refClean.startsWith("file:///")) refClean = refClean.mid(8);
+    else if (refClean.startsWith("file://")) refClean = refClean.mid(7);
+    refClean = QUrl::fromPercentEncoding(refClean.toUtf8());
+    
+    qDebug() << "  srcClean:" << srcClean;
+    qDebug() << "  refClean:" << refClean;
+    
+    GDALDataset *srcDS = (GDALDataset*)GDALOpen(srcClean.toUtf8().constData(), GA_ReadOnly);
+    GDALDataset *refDS = (GDALDataset*)GDALOpen(refClean.toUtf8().constData(), GA_ReadOnly);
+    
+    if (!srcDS || !refDS) {
+        qWarning() << "Failed to open datasets for warping";
+        qWarning() << "  srcDS:" << (srcDS ? "OK" : "FAILED");
+        qWarning() << "  refDS:" << (refDS ? "OK" : "FAILED");
+        if (srcDS) GDALClose(srcDS);
+        if (refDS) GDALClose(refDS);
+        return QImage();
+    }
+
+    double refGeoTransform[6];
+    refDS->GetGeoTransform(refGeoTransform);
+    const char *refProj = refDS->GetProjectionRef();
+    const char *srcProj = srcDS->GetProjectionRef();
+
+    qDebug() << "  refProj:" << (refProj ? refProj : "(null)");
+    qDebug() << "  srcProj:" << (srcProj ? srcProj : "(null)");
+
+    int xSize = refDS->GetRasterXSize();
+    int ySize = refDS->GetRasterYSize();
+    int srcBands = srcDS->GetRasterCount();
+    
+    qDebug() << "  refSize:" << xSize << "x" << ySize;
+    qDebug() << "  srcBands:" << srcBands;
+    
+    // Limita la dimensione per evitare allocazioni enormi
+    int maxDim = 4096;
+    int outWidth = xSize;
+    int outHeight = ySize;
+    if (xSize > maxDim || ySize > maxDim) {
+        double scale = std::min((double)maxDim / xSize, (double)maxDim / ySize);
+        outWidth = static_cast<int>(xSize * scale);
+        outHeight = static_cast<int>(ySize * scale);
+        qDebug() << "  Downsampling output to:" << outWidth << "x" << outHeight;
+    }
+    
+    // Se le immagini non hanno proiezione, carica senza warping
+    if (!refProj || strlen(refProj) == 0 || !srcProj || strlen(srcProj) == 0) {
+        qWarning() << "One or both images have no projection, loading source directly without warping";
+        
+        QImage img;
+        if (srcBands >= 3) {
+            img = QImage(outWidth, outHeight, QImage::Format_RGB32);
+            std::vector<uint8_t> rBuf(outWidth * outHeight);
+            std::vector<uint8_t> gBuf(outWidth * outHeight);
+            std::vector<uint8_t> bBuf(outWidth * outHeight);
+            srcDS->GetRasterBand(1)->RasterIO(GF_Read, 0, 0, srcDS->GetRasterXSize(), srcDS->GetRasterYSize(), rBuf.data(), outWidth, outHeight, GDT_Byte, 0, 0);
+            srcDS->GetRasterBand(2)->RasterIO(GF_Read, 0, 0, srcDS->GetRasterXSize(), srcDS->GetRasterYSize(), gBuf.data(), outWidth, outHeight, GDT_Byte, 0, 0);
+            srcDS->GetRasterBand(3)->RasterIO(GF_Read, 0, 0, srcDS->GetRasterXSize(), srcDS->GetRasterYSize(), bBuf.data(), outWidth, outHeight, GDT_Byte, 0, 0);
+            for (int y = 0; y < outHeight; ++y) {
+                QRgb *scanLine = (QRgb*)img.scanLine(y);
+                for (int x = 0; x < outWidth; ++x) {
+                    int idx = y * outWidth + x;
+                    scanLine[x] = qRgb(rBuf[idx], gBuf[idx], bBuf[idx]);
+                }
+            }
+        } else if (srcBands == 1) {
+            img = QImage(outWidth, outHeight, QImage::Format_Grayscale8);
+            srcDS->GetRasterBand(1)->RasterIO(GF_Read, 0, 0, srcDS->GetRasterXSize(), srcDS->GetRasterYSize(), img.bits(), outWidth, outHeight, GDT_Byte, 0, 0);
+        }
+        
+        GDALClose(srcDS);
+        GDALClose(refDS);
+        return img;
+    }
+    
+    GDALDriver *memDriver = GetGDALDriverManager()->GetDriverByName("MEM");
+    if (!memDriver) {
+        qWarning() << "Failed to get MEM driver";
+        GDALClose(srcDS);
+        GDALClose(refDS);
+        return QImage();
+    }
+    
+    // Usa dimensioni ridotte per l'output
+    GDALDataset *outDS = memDriver->Create("", outWidth, outHeight, srcBands, GDT_Byte, nullptr);
+    if (!outDS) {
+        qWarning() << "Failed to create output dataset";
+        GDALClose(srcDS);
+        GDALClose(refDS);
+        return QImage();
+    }
+    
+    // Scala il geotransform per le nuove dimensioni
+    double outGeoTransform[6];
+    for (int i = 0; i < 6; i++) outGeoTransform[i] = refGeoTransform[i];
+    if (outWidth != xSize || outHeight != ySize) {
+        double scaleX = (double)xSize / outWidth;
+        double scaleY = (double)ySize / outHeight;
+        outGeoTransform[1] *= scaleX;  // pixel width
+        outGeoTransform[5] *= scaleY;  // pixel height (negative)
+    }
+    outDS->SetGeoTransform(outGeoTransform);
+    outDS->SetProjection(refProj);
+
+    void *transformArg = GDALCreateGenImgProjTransformer(srcDS, srcProj,
+                                                         outDS, refProj, FALSE, 0, 1);
+    if (!transformArg) {
+        qWarning() << "Failed to create projection transformer, loading source directly";
+        GDALClose(outDS);
+        
+        // Fallback: carica l'immagine sorgente senza warping
+        QImage img;
+        if (srcBands >= 3) {
+            img = QImage(outWidth, outHeight, QImage::Format_RGB32);
+            std::vector<uint8_t> rBuf(outWidth * outHeight);
+            std::vector<uint8_t> gBuf(outWidth * outHeight);
+            std::vector<uint8_t> bBuf(outWidth * outHeight);
+            srcDS->GetRasterBand(1)->RasterIO(GF_Read, 0, 0, srcDS->GetRasterXSize(), srcDS->GetRasterYSize(), rBuf.data(), outWidth, outHeight, GDT_Byte, 0, 0);
+            srcDS->GetRasterBand(2)->RasterIO(GF_Read, 0, 0, srcDS->GetRasterXSize(), srcDS->GetRasterYSize(), gBuf.data(), outWidth, outHeight, GDT_Byte, 0, 0);
+            srcDS->GetRasterBand(3)->RasterIO(GF_Read, 0, 0, srcDS->GetRasterXSize(), srcDS->GetRasterYSize(), bBuf.data(), outWidth, outHeight, GDT_Byte, 0, 0);
+            for (int y = 0; y < outHeight; ++y) {
+                QRgb *scanLine = (QRgb*)img.scanLine(y);
+                for (int x = 0; x < outWidth; ++x) {
+                    int idx = y * outWidth + x;
+                    scanLine[x] = qRgb(rBuf[idx], gBuf[idx], bBuf[idx]);
+                }
+            }
+        } else if (srcBands == 1) {
+            img = QImage(outWidth, outHeight, QImage::Format_Grayscale8);
+            srcDS->GetRasterBand(1)->RasterIO(GF_Read, 0, 0, srcDS->GetRasterXSize(), srcDS->GetRasterYSize(), img.bits(), outWidth, outHeight, GDT_Byte, 0, 0);
+        }
+        
+        GDALClose(srcDS);
+        GDALClose(refDS);
+        return img;
+    }
+    
+    GDALWarpOptions *warpOptions = GDALCreateWarpOptions();
+    warpOptions->hSrcDS = srcDS;
+    warpOptions->hDstDS = outDS;
+    warpOptions->pTransformerArg = transformArg;
+    warpOptions->pfnTransformer = GDALGenImgProjTransform;
+    warpOptions->nBandCount = srcBands;
+    warpOptions->panSrcBands = (int *)CPLMalloc(sizeof(int) * warpOptions->nBandCount);
+    warpOptions->panDstBands = (int *)CPLMalloc(sizeof(int) * warpOptions->nBandCount);
+    for (int i = 0; i < warpOptions->nBandCount; i++) {
+        warpOptions->panSrcBands[i] = i + 1;
+        warpOptions->panDstBands[i] = i + 1;
+    }
+    
+    qDebug() << "Starting warp operation...";
+    
+    // Esegui warp in un blocco separato per controllare il lifetime di GDALWarpOperation
+    {
+        GDALWarpOperation warpOp;
+        CPLErr warpErr = warpOp.Initialize(warpOptions);
+        if (warpErr != CE_None) {
+            qWarning() << "Failed to initialize warp operation";
+            GDALDestroyGenImgProjTransformer(transformArg);
+            GDALClose(srcDS);
+            GDALClose(refDS);
+            GDALClose(outDS);
+            CPLFree(warpOptions->panSrcBands);
+            CPLFree(warpOptions->panDstBands);
+            GDALDestroyWarpOptions(warpOptions);
+            return QImage();
+        }
+        warpOp.ChunkAndWarpImage(0, 0, outWidth, outHeight);
+    }
+    qDebug() << "Warp operation completed";
+
+    // Prima leggiamo i dati, poi facciamo cleanup
+    qDebug() << "Creating output image...";
+    qDebug() << "  Output size:" << outWidth << "x" << outHeight;
+    qDebug() << "  Output bands:" << outDS->GetRasterCount();
+
+    // Per immagini binarie/maschera a 1 banda, crea ARGB con nero=trasparente
+    QImage img;
+    int bands = outDS->GetRasterCount();
+    
+    if (bands >= 3) {
+        qDebug() << "  Reading as RGB...";
+        img = QImage(outWidth, outHeight, QImage::Format_RGB32);
+        std::vector<uint8_t> rBuf(outWidth * outHeight);
+        std::vector<uint8_t> gBuf(outWidth * outHeight);
+        std::vector<uint8_t> bBuf(outWidth * outHeight);
+        outDS->GetRasterBand(1)->RasterIO(GF_Read, 0, 0, outWidth, outHeight, rBuf.data(), outWidth, outHeight, GDT_Byte, 0, 0);
+        outDS->GetRasterBand(2)->RasterIO(GF_Read, 0, 0, outWidth, outHeight, gBuf.data(), outWidth, outHeight, GDT_Byte, 0, 0);
+        outDS->GetRasterBand(3)->RasterIO(GF_Read, 0, 0, outWidth, outHeight, bBuf.data(), outWidth, outHeight, GDT_Byte, 0, 0);
+        for (int y = 0; y < outHeight; ++y) {
+            QRgb *scanLine = (QRgb*)img.scanLine(y);
+            for (int x = 0; x < outWidth; ++x) {
+                int idx = y * outWidth + x;
+                scanLine[x] = qRgb(rBuf[idx], gBuf[idx], bBuf[idx]);
+            }
+        }
+    } else if (bands == 1) {
+        // Immagine maschera: nero = trasparente, altri valori = colore basato sul valore
+        qDebug() << "  Reading as mask with transparency...";
+        img = QImage(outWidth, outHeight, QImage::Format_ARGB32);
+        std::vector<uint8_t> buf(outWidth * outHeight);
+        outDS->GetRasterBand(1)->RasterIO(GF_Read, 0, 0, outWidth, outHeight, buf.data(), outWidth, outHeight, GDT_Byte, 0, 0);
+        for (int y = 0; y < outHeight; ++y) {
+            QRgb *scanLine = (QRgb*)img.scanLine(y);
+            for (int x = 0; x < outWidth; ++x) {
+                int idx = y * outWidth + x;
+                uint8_t val = buf[idx];
+                if (val == 0) {
+                    scanLine[x] = qRgba(0, 0, 0, 0); // trasparente
+                } else {
+                    scanLine[x] = qRgba(val, val, val, 255); // opaco grigio
+                }
+            }
+        }
+    } else {
+        qWarning() << "  Unsupported band count:" << bands;
+        img = QImage();
+    }
+    
+    qDebug() << "  Output image created:" << img.size();
+    
+    // Cleanup warp resources dopo aver letto i dati
+    qDebug() << "Cleaning up GDAL resources...";
+    
+    // IMPORTANTE: GDALDestroyWarpOptions NON libera automaticamente pTransformerArg,
+    // panSrcBands e panDstBands, quindi dobbiamo farlo manualmente
+    // MA dobbiamo impostare pTransformerArg a nullptr prima per evitare problemi
+    warpOptions->pTransformerArg = nullptr;
+    CPLFree(warpOptions->panSrcBands);
+    warpOptions->panSrcBands = nullptr;
+    CPLFree(warpOptions->panDstBands);
+    warpOptions->panDstBands = nullptr;
+    GDALDestroyWarpOptions(warpOptions);
+    
+    // Ora possiamo distruggere il transformer in sicurezza
+    GDALDestroyGenImgProjTransformer(transformArg);
+    
+    qDebug() << "Closing datasets...";
+    GDALClose(outDS);
+    GDALClose(srcDS);
+    GDALClose(refDS);
+    qDebug() << "GDAL cleanup complete";
+
+    return img;
+}
 
 GeoTiffProcessor::GeoTiffProcessor(QObject *parent)
     : QObject(parent)
@@ -315,113 +577,109 @@ QImage GeoTiffImageProvider::requestImage(const QString &id, QSize *size, const 
     // Decode the file path
     QString filePath = QUrl::fromPercentEncoding(parts[0].toUtf8());
     qDebug() << "Decoded file path:" << filePath;
-    
+
     // Parse parameters
     int colorMapIndex = 0;
+    QString refPath;
     if (parts.size() > 1) {
         QStringList params = parts[1].split("&");
         for (const QString &param : params) {
             if (param.startsWith("colormap=")) {
                 colorMapIndex = param.mid(9).toInt();
             }
+            if (param.startsWith("alignTo=")) {
+                refPath = QUrl::fromPercentEncoding(param.mid(8).toUtf8());
+            }
         }
     }
-    
-    qDebug() << "Using colormap index:" << colorMapIndex;
-    
-    // Verify file exists
-    QFileInfo fileInfo(filePath);
-    if (!fileInfo.exists()) {
-        qWarning() << "File does not exist:" << filePath;
-        qWarning() << "Absolute path:" << fileInfo.absoluteFilePath();
-        return QImage();
-    }
-    
-    qDebug() << "Opening GeoTIFF:" << fileInfo.absoluteFilePath();
 
-    // Open the GeoTIFF with GDAL
-    GDALDataset *dataset = (GDALDataset*)GDALOpen(fileInfo.absoluteFilePath().toUtf8().constData(), GA_ReadOnly);
+    qDebug() << "Using colormap index:" << colorMapIndex;
+    if (!refPath.isEmpty()) {
+        // Pulisci i path da file:/// e decodifica
+        QString filePathClean = filePath;
+        if (filePathClean.startsWith("file:///")) filePathClean = filePathClean.mid(8);
+        else if (filePathClean.startsWith("file://")) filePathClean = filePathClean.mid(7);
+        filePathClean = QUrl::fromPercentEncoding(filePathClean.toUtf8());
+        QString refPathClean = refPath;
+        if (refPathClean.startsWith("file:///")) refPathClean = refPathClean.mid(8);
+        else if (refPathClean.startsWith("file://")) refPathClean = refPathClean.mid(7);
+        refPathClean = QUrl::fromPercentEncoding(refPathClean.toUtf8());
+        qDebug() << "Aligning image to reference:" << refPathClean;
+        QImage aligned = GeoTiffProcessor::warpImageToMatch(filePathClean, refPathClean);
+        if (size) *size = aligned.size();
+        return aligned;
+    }
+
+    // Pulisci il path per il caricamento normale
+    QString cleanFilePath = filePath;
+    if (cleanFilePath.startsWith("file:///")) cleanFilePath = cleanFilePath.mid(8);
+    else if (cleanFilePath.startsWith("file://")) cleanFilePath = cleanFilePath.mid(7);
+    cleanFilePath = QUrl::fromPercentEncoding(cleanFilePath.toUtf8());
+    
+    qDebug() << "Loading image from:" << cleanFilePath;
+    
+    GDALDataset *dataset = (GDALDataset*)GDALOpen(cleanFilePath.toUtf8().constData(), GA_ReadOnly);
     if (dataset == nullptr) {
-        qWarning() << "Failed to open GeoTIFF with GDAL:" << filePath;
+        qWarning() << "Failed to open GeoTIFF with GDAL:" << cleanFilePath;
         qWarning() << "GDAL Error:" << CPLGetLastErrorMsg();
         return QImage();
     }
 
-    qDebug() << "GDAL dataset opened successfully";
-    qDebug() << "Raster size:" << dataset->GetRasterXSize() << "x" << dataset->GetRasterYSize();
-    qDebug() << "Number of bands:" << dataset->GetRasterCount();
+    int bandCount = dataset->GetRasterCount();
+    int width = dataset->GetRasterXSize();
+    int height = dataset->GetRasterYSize();
+    
+    qDebug() << "Image info - Width:" << width << "Height:" << height << "Bands:" << bandCount;
 
-    int numBands = dataset->GetRasterCount();
-    
-    // Check if this is RGB (colormap=-1 means RGB passthrough)
-    bool isRGB = (colorMapIndex == -1 && numBands >= 3);
-    
-    if (isRGB) {
-        qDebug() << "Processing as RGB image (3 bands)";
+    // Se l'immagine ha 3+ bande e colormap=-1, carica come RGB
+    if (bandCount >= 3 && colorMapIndex == -1) {
+        qDebug() << "Loading as RGB image (3 bands)";
         
-        // Get dimensions from first band
-        GDALRasterBand *band1 = dataset->GetRasterBand(1);
-        int width = band1->GetXSize();
-        int height = band1->GetYSize();
-        
-        // Downsample for memory
-        int maxDim = 2048;
-        double scale = 1.0;
-        if (width > maxDim || height > maxDim) {
-            scale = std::min((double)maxDim / width, (double)maxDim / height);
+        // Determine output size
+        int outWidth = width;
+        int outHeight = height;
+        if (requestedSize.width() > 0 && requestedSize.height() > 0) {
+            double aspectRatio = (double)width / height;
+            outWidth = requestedSize.width();
+            outHeight = (int)(outWidth / aspectRatio);
+            if (outHeight > requestedSize.height()) {
+                outHeight = requestedSize.height();
+                outWidth = (int)(outHeight * aspectRatio);
+            }
         }
-        int outWidth = (int)(width * scale);
-        int outHeight = (int)(height * scale);
         
-        qDebug() << "Downsampling from" << width << "x" << height << "to" << outWidth << "x" << outHeight;
+        QImage image(outWidth, outHeight, QImage::Format_RGB32);
         
-        // Read RGB bands
-        std::vector<float> dataR(outWidth * outHeight);
-        std::vector<float> dataG(outWidth * outHeight);
-        std::vector<float> dataB(outWidth * outHeight);
+        // Alloca buffer per le 3 bande
+        std::vector<uint8_t> rBuf(outWidth * outHeight);
+        std::vector<uint8_t> gBuf(outWidth * outHeight);
+        std::vector<uint8_t> bBuf(outWidth * outHeight);
         
-        GDALRasterBand *bandR = dataset->GetRasterBand(1);
-        GDALRasterBand *bandG = dataset->GetRasterBand(2);
-        GDALRasterBand *bandB = dataset->GetRasterBand(3);
+        // Leggi le 3 bande
+        GDALRasterBand *rBand = dataset->GetRasterBand(1);
+        GDALRasterBand *gBand = dataset->GetRasterBand(2);
+        GDALRasterBand *bBand = dataset->GetRasterBand(3);
         
-        bandR->RasterIO(GF_Read, 0, 0, width, height, dataR.data(), outWidth, outHeight, GDT_Float32, 0, 0);
-        bandG->RasterIO(GF_Read, 0, 0, width, height, dataG.data(), outWidth, outHeight, GDT_Float32, 0, 0);
-        bandB->RasterIO(GF_Read, 0, 0, width, height, dataB.data(), outWidth, outHeight, GDT_Float32, 0, 0);
+        rBand->RasterIO(GF_Read, 0, 0, width, height, rBuf.data(), outWidth, outHeight, GDT_Byte, 0, 0);
+        gBand->RasterIO(GF_Read, 0, 0, width, height, gBuf.data(), outWidth, outHeight, GDT_Byte, 0, 0);
+        bBand->RasterIO(GF_Read, 0, 0, width, height, bBuf.data(), outWidth, outHeight, GDT_Byte, 0, 0);
         
-        // Find min/max for normalization
-        float minR = *std::min_element(dataR.begin(), dataR.end());
-        float maxR = *std::max_element(dataR.begin(), dataR.end());
-        float minG = *std::min_element(dataG.begin(), dataG.end());
-        float maxG = *std::max_element(dataG.begin(), dataG.end());
-        float minB = *std::min_element(dataB.begin(), dataB.end());
-        float maxB = *std::max_element(dataB.begin(), dataB.end());
-        
-        qDebug() << "RGB ranges - R:" << minR << "-" << maxR << "G:" << minG << "-" << maxG << "B:" << minB << "-" << maxB;
-        
-        // Create QImage
-        QImage image(outWidth, outHeight, QImage::Format_RGB888);
-        
-        for (int y = 0; y < outHeight; y++) {
-            for (int x = 0; x < outWidth; x++) {
+        // Componi l'immagine RGB
+        for (int y = 0; y < outHeight; ++y) {
+            QRgb *scanLine = (QRgb*)image.scanLine(y);
+            for (int x = 0; x < outWidth; ++x) {
                 int idx = y * outWidth + x;
-                int r = (int)((dataR[idx] - minR) / (maxR - minR) * 255);
-                int g = (int)((dataG[idx] - minG) / (maxG - minG) * 255);
-                int b = (int)((dataB[idx] - minB) / (maxB - minB) * 255);
-                r = std::max(0, std::min(255, r));
-                g = std::max(0, std::min(255, g));
-                b = std::max(0, std::min(255, b));
-                image.setPixel(x, y, qRgb(r, g, b));
+                scanLine[x] = qRgb(rBuf[idx], gBuf[idx], bBuf[idx]);
             }
         }
         
         GDALClose(dataset);
-        
         if (size) *size = image.size();
-        qDebug() << "RGB image generation complete:" << image.size();
+        qDebug() << "RGB image loaded:" << image.size();
         return image;
     }
 
-    // Single band processing (original code)
+    // Single band processing (colormap mode)
     // Get the first band
     GDALRasterBand *band = dataset->GetRasterBand(1);
     if (band == nullptr) {
@@ -430,8 +688,7 @@ QImage GeoTiffImageProvider::requestImage(const QString &id, QSize *size, const 
         return QImage();
     }
 
-    int width = band->GetXSize();
-    int height = band->GetYSize();
+    // Usa width e height già dichiarati sopra
     GDALDataType dataType = band->GetRasterDataType();
     
     qDebug() << "Band info - Width:" << width << "Height:" << height << "Type:" << dataType;

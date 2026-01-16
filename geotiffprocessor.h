@@ -33,6 +33,9 @@ public slots:
     QVariantList getHeightData(const QString &imagePath, int maxWidth, int maxHeight);
     void clearCache();
 
+    // Allinea srcPath su refPath e restituisce QImage allineata (statica)
+    static QImage warpImageToMatch(const QString &srcPath, const QString &refPath);
+
 signals:
     void imagesChanged();
     void analysisCompleted(const QString &resultPath, double fCov, double meanNdvi);

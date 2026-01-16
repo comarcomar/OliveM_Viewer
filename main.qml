@@ -284,21 +284,32 @@ ApplicationWindow {
             // Right panel - Analysis result or RGB  
             Rectangle {
                 Layout.fillWidth: true
-                Layout.fillHeight: true  // Match left panel height
+                Layout.fillHeight: true
                 color: mainWindow.backgroundColor
                 
                 ColumnLayout {
                     anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 10
+                    anchors.margins: 5
+                    spacing: 5
                     
                     // Header with title
-                    Label {
-                        text: "Analysis Result-"
-                        font.pixelSize: 18
-                        font.bold: true
-                        color: mainWindow.textColor
+                    Rectangle {
                         Layout.fillWidth: true
+                        Layout.preferredHeight: 45
+                        color: mainWindow.panelColor
+                        border.color: mainWindow.borderColor
+                        border.width: 1
+                        radius: 3
+                        
+                        Label {
+                            anchors.left: parent.left
+                            anchors.leftMargin: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "Analysis Result"
+                            font.pixelSize: 14
+                            font.bold: true
+                            color: mainWindow.textColor
+                        }
                     }
                     
                     // Result viewer - fills all remaining space
