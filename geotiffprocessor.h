@@ -31,6 +31,7 @@ public slots:
     void setAreaThreshold(int threshold);
     QVariantMap getImageStatistics(const QString &imagePath);
     QVariantList getHeightData(const QString &imagePath, int maxWidth, int maxHeight);
+    QVariantList getHistogramData(const QString &imagePath, int bins);
     void clearCache();
 
     // Allinea srcPath su refPath e restituisce QImage allineata (statica)

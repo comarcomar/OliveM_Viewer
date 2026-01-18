@@ -4,7 +4,7 @@
         <file>ColorLegend.qml</file>
         <file>ImageViewerContent.qml</file>
         <file>ResultImageViewer.qml</file>
-        <file>GeoTiff3DView.qml</file>
         <file>GeoTiffImagePanel.qml</file>
+        <file>Histogram.qml</file>
     </qresource>
 </RCC>

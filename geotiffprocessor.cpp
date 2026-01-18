@@ -949,3 +949,176 @@ void GeoTiffProcessor::clearCache()
     
     qDebug() << "Cache cleared";
 }
+
+QVariantList GeoTiffProcessor::getHistogramData(const QString &imagePath, int bins)
+{
+    QVariantList result;
+    
+    if (imagePath.isEmpty()) {
+        return result;
+    }
+    
+    GDALDataset *dataset = (GDALDataset*)GDALOpen(imagePath.toUtf8().constData(), GA_ReadOnly);
+    if (dataset == nullptr) {
+        qWarning() << "Failed to open GeoTIFF for histogram:" << imagePath;
+        return result;
+    }
+    
+    GDALRasterBand *band = dataset->GetRasterBand(1);
+    if (band == nullptr) {
+        qWarning() << "No raster band found for histogram";
+        GDALClose(dataset);
+        return result;
+    }
+    
+    int width = band->GetXSize();
+    int height = band->GetYSize();
+    int pixelCount = width * height;
+    
+    // Read all data
+    std::vector<float> data(pixelCount);
+    CPLErr err = band->RasterIO(GF_Read, 0, 0, width, height, data.data(), width, height, GDT_Float32, 0, 0);
+    
+    if (err != CE_None) {
+        qWarning() << "Failed to read raster data for histogram";
+        GDALClose(dataset);
+        return result;
+    }
+    
+    // Filter valid data (NaN, infinite, and -9999)
+    std::vector<float> validData;
+    for (int i = 0; i < pixelCount; ++i) {
+        float value = data[i];
+        if (!std::isnan(value) && !std::isinf(value) && value != -9999.0f) {
+            validData.push_back(value);
+        }
+    }
+    
+    if (validData.empty()) {
+        GDALClose(dataset);
+        return result;
+    }
+    
+    // Sort data to calculate percentiles
+    std::sort(validData.begin(), validData.end());
+    
+    // Calculate quartiles for IQR method
+    int n = validData.size();
+    int q1_idx = n / 4;
+    int q3_idx = 3 * n / 4;
+    float q1 = validData[q1_idx];
+    float q3 = validData[q3_idx];
+    float iqr = q3 - q1;
+    
+    // Define upper bound
+    float upperBound = q3 + 1.5f * iqr;
+    
+    qDebug() << "Histogram outlier removal:";
+    qDebug() << "  Total valid data points:" << n;
+    qDebug() << "  Q1 index:" << q1_idx << "value:" << q1;
+    qDebug() << "  Q3 index:" << q3_idx << "value:" << q3;
+    qDebug() << "  IQR:" << iqr;
+    qDebug() << "  Upper bound (Q3 + 1.5*IQR):" << upperBound;
+    qDebug() << "  Data range:" << validData.front() << "to" << validData.back();
+    
+    // Filter data above upper bound
+    std::vector<float> filteredData;
+    int removedCount = 0;
+    for (float value : validData) {
+        if (value <= upperBound) {
+            filteredData.push_back(value);
+        } else {
+            removedCount++;
+        }
+    }
+    
+    qDebug() << "  Original data points:" << validData.size() 
+             << "Removed (> upper bound):" << removedCount
+             << "After filtering:" << filteredData.size();
+    
+    if (filteredData.empty()) {
+        GDALClose(dataset);
+        return result;
+    }
+    
+    // Get min/max from filtered data
+    float minVal = filteredData.front();
+    float maxVal = filteredData.back();
+    
+    if (maxVal <= minVal) {
+        maxVal = minVal + 1.0f;
+    }
+    
+    // Create histogram bins
+    std::vector<int> histogram(bins, 0);
+    
+    // Build histogram from filtered data
+    for (float value : filteredData) {
+        double normalized = (value - minVal) / (maxVal - minVal);
+        normalized = std::max(0.0, std::min(1.0, normalized));
+        
+        int binIndex = static_cast<int>(normalized * (bins - 1));
+        binIndex = std::max(0, std::min(bins - 1, binIndex));
+        histogram[binIndex]++;
+    }
+    
+    // Find outlier bins by IQR method on bin counts
+    std::vector<int> binCounts;
+    for (int count : histogram) {
+        if (count > 0) {
+            binCounts.push_back(count);
+        }
+    }
+    
+    if (!binCounts.empty()) {
+        std::sort(binCounts.begin(), binCounts.end());
+        int n_bins = binCounts.size();
+        int q1_idx = n_bins / 4;
+        int q3_idx = 3 * n_bins / 4;
+        int q1_count = binCounts[q1_idx];
+        int q3_count = binCounts[q3_idx];
+        int iqr_count = q3_count - q1_count;
+        int upper_bound_count = q3_count + 3 * iqr_count;  // More aggressive: 3x instead of 1.5x
+        
+        qDebug() << "Histogram bin count filtering:";
+        qDebug() << "  Non-empty bins:" << n_bins;
+        qDebug() << "  Q1 count:" << q1_count << "Q3 count:" << q3_count << "IQR:" << iqr_count;
+        qDebug() << "  Upper bound for bin counts:" << upper_bound_count;
+        
+        // Remove anomalous bin peaks
+        int removedBins = 0;
+        for (int i = 0; i < bins; ++i) {
+            if (histogram[i] > upper_bound_count) {
+                qDebug() << "  Removing bin" << i << "with count" << histogram[i];
+                histogram[i] = 0;
+                removedBins++;
+            }
+        }
+        qDebug() << "  Removed" << removedBins << "anomalous bins";
+    }
+    
+    // Find max count for normalization (after removing outliers)
+    int maxCount = 0;
+    for (int count : histogram) {
+        maxCount = std::max(maxCount, count);
+    }
+    
+    // Build result
+    for (int i = 0; i < bins; ++i) {
+        double binValue = minVal + (i / (double)(bins - 1)) * (maxVal - minVal);
+        double normalizedCount = maxCount > 0 ? histogram[i] / (double)maxCount : 0.0;
+        
+        QVariantMap bin;
+        bin["index"] = i;
+        bin["value"] = binValue;
+        bin["count"] = histogram[i];
+        bin["normalized"] = normalizedCount;
+        
+        result.append(bin);
+    }
+    
+    GDALClose(dataset);
+    
+    qDebug() << "Generated histogram with" << bins << "bins (NaN/inf and upper outliers removed)";
+    return result;
+}

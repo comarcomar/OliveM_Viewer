@@ -11,8 +11,8 @@ Item {
     property var colorMaps: []
     property string imagePath: ""
     property int currentColorMap: 0
-    property bool show3D: false
     property var processor: null
+    property var histogramData: []
     property var themeColors: ({
         panelColor: "#2a2a2a",
         borderColor: "#404040",
@@ -161,6 +161,82 @@ Item {
         }
     }
     
+    // Detached window for histogram
+    Window {
+        id: histogramWindow
+        visible: false
+        width: 600
+        height: 400
+        title: root.panelTitle + " - Histogram"
+        color: root.themeColors.panelColor
+        
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 5
+            spacing: 5
+            
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 40
+                color: root.themeColors.panelColor
+                border.color: root.themeColors.borderColor
+                border.width: 1
+                
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 5
+                    spacing: 10
+                    
+                    Text {
+                        text: "Histogram - " + root.panelTitle
+                        color: root.themeColors.textColor
+                        font.pixelSize: 14
+                        font.bold: true
+                        Layout.fillWidth: true
+                    }
+                    
+                    ToolButton {
+                        implicitWidth: 32
+                        implicitHeight: 32
+                        contentItem: Text {
+                            text: "🔄"
+                            font.pixelSize: 16
+                            color: root.themeColors.textColor
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        background: Rectangle {
+                            color: parent.pressed ? root.themeColors.buttonPressedColor : 
+                                   (parent.hovered ? root.themeColors.buttonHoverColor : root.themeColors.buttonColor)
+                            radius: 3
+                        }
+                        onClicked: updateHistogram()
+                        ToolTip.visible: hovered
+                        ToolTip.text: "Refresh Histogram"
+                        ToolTip.delay: 500
+                    }
+                }
+            }
+            
+            Histogram {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                histogramData: root.histogramData
+                themeColors: root.themeColors
+            }
+        }
+    }
+    
+    function updateHistogram() {
+        if (root.imagePath === "" || !root.processor) {
+            console.log("Cannot update histogram: no image or processor")
+            return
+        }
+        
+        console.log("Updating histogram for:", root.imagePath)
+        root.histogramData = root.processor.getHistogramData(root.imagePath, 256)
+    }
+    
     ColumnLayout {
         anchors.fill: parent
         spacing: 5
@@ -283,6 +359,31 @@ Item {
                     ToolTip.delay: 500
                 }
                 
+                ToolButton {
+                    implicitWidth: 32
+                    implicitHeight: 32
+                    enabled: root.imagePath !== ""
+                    contentItem: Text {
+                        text: "📊"
+                        font.pixelSize: 16
+                        color: parent.enabled ? root.themeColors.textColor : "#666666"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        color: parent.pressed ? root.themeColors.buttonPressedColor : 
+                               (parent.hovered ? root.themeColors.buttonHoverColor : root.themeColors.buttonColor)
+                        radius: 3
+                    }
+                    onClicked: {
+                        updateHistogram()
+                        histogramWindow.visible = !histogramWindow.visible
+                    }
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Show Histogram"
+                    ToolTip.delay: 500
+                }
+                
                 Rectangle {
                     width: 1
                     height: 30
@@ -319,30 +420,15 @@ Item {
                 anchors.fill: parent
                 spacing: 0
                 
-                Item {
+                ImageViewerContent {
+                    id: imageViewer
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    
-                    ImageViewerContent {
-                        id: imageViewer
-                        anchors.fill: parent
-                        anchors.margins: 5
-                        visible: !root.show3D
-                        imagePath: root.imagePath
-                        colorMapIndex: root.currentColorMap
-                        showLegend: false
-                        hideInstructionsDelay: 5000
-                    }
-                    
-                    GeoTiff3DView {
-                        id: view3D
-                        anchors.fill: parent
-                        anchors.margins: 5
-                        visible: root.show3D
-                        imagePath: root.imagePath
-                        colorMapIndex: root.currentColorMap
-                        processor: root.processor
-                    }
+                    anchors.margins: 5
+                    imagePath: root.imagePath
+                    colorMapIndex: root.currentColorMap
+                    showLegend: false
+                    hideInstructionsDelay: 5000
                 }
                 
                 ColorLegend {
@@ -484,19 +570,6 @@ Item {
                     border.color: root.themeColors.borderColor
                     border.width: 1
                     radius: 3
-                }
-            }
-            
-            CheckBox {
-                text: "3D View"
-                checked: root.show3D
-                onCheckedChanged: root.show3D = checked
-                contentItem: Text {
-                    text: parent.text
-                    color: root.themeColors.textSecondaryColor
-                    leftPadding: parent.indicator.width + 5
-                    verticalAlignment: Text.AlignVCenter
-                    font.pixelSize: 11
                 }
             }
         }

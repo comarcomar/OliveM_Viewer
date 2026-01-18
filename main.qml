@@ -596,26 +596,19 @@ ApplicationWindow {
     function resetSystem() {
         console.log("=== RESET SYSTEM START ===")
         
-        // Turn off 3D first
-        image1Panel.show3D = false
-        image2Panel.show3D = false
+        // Clear paths
+        image1Panel.imagePath = ""
+        image2Panel.imagePath = ""
+        rgbImagePath = ""
+        resultImage.displayPath = ""
         
-        // Wait a bit for 3D to shut down
-        Qt.callLater(function() {
-            // Clear paths
-            image1Panel.imagePath = ""
-            image2Panel.imagePath = ""
-            rgbImagePath = ""
-            resultImage.displayPath = ""
-            
-            // Reset UI
-            param1Text.text = "---"
-            param2Text.text = "---"
-            
-            // Clear processor
-            processor.clearCache()
-            
-            console.log("=== RESET SYSTEM COMPLETE ===")
-        })
+        // Reset UI
+        param1Text.text = "---"
+        param2Text.text = "---"
+        
+        // Clear processor
+        processor.clearCache()
+        
+        console.log("=== RESET SYSTEM COMPLETE ===")
     }
 }
