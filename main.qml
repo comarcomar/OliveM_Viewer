@@ -360,7 +360,14 @@ ApplicationWindow {
                     Layout.preferredWidth: 200
                     enabled: processor.hasValidImages
                     // NO visible property - always shown!
-                    onClicked: processor.runAnalysis()
+                    onClicked: {
+                        if (!processor.hasShapefileSelected) {
+                            errorDialog.text = "Shapefile archive is required for analysis.\n\nPlease select a valid shapefile (.zip) before running the analysis."
+                            errorDialog.open()
+                        } else {
+                            processor.runAnalysis()
+                        }
+                    }
                     
                     background: Rectangle {
                         color: parent.enabled ? (parent.pressed ? "#006600" : 

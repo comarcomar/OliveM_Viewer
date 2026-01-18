@@ -293,6 +293,11 @@ bool GeoTiffProcessor::hasValidImages() const
     return m_hasImage1 && m_hasImage2;
 }
 
+bool GeoTiffProcessor::hasShapefileSelected() const
+{
+    return !m_shapefileZipPath.isEmpty();
+}
+
 void GeoTiffProcessor::setImage1(const QString &path)
 {
     m_image1Path = path;
@@ -319,6 +324,7 @@ void GeoTiffProcessor::setShapefileZip(const QString &path)
 {
     m_shapefileZipPath = path;
     qDebug() << "Shapefile ZIP set:" << path;
+    emit shapefileChanged();
 }
 
 void GeoTiffProcessor::setDenoiseFlag(bool enabled)

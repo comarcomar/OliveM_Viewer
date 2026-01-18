@@ -15,12 +15,14 @@ class GeoTiffProcessor : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(bool hasValidImages READ hasValidImages NOTIFY imagesChanged)
+    Q_PROPERTY(bool hasShapefileSelected READ hasShapefileSelected NOTIFY shapefileChanged)
 
 public:
     explicit GeoTiffProcessor(QObject *parent = nullptr);
     ~GeoTiffProcessor();
 
     bool hasValidImages() const;
+    bool hasShapefileSelected() const;
 
 public slots:
     void setImage1(const QString &path);
@@ -39,6 +41,7 @@ public slots:
 
 signals:
     void imagesChanged();
+    void shapefileChanged();
     void analysisCompleted(const QString &resultPath, double fCov, double meanNdvi);
     void errorOccurred(const QString &errorMessage);
 
